@@ -1,0 +1,32 @@
+timestamp,method,path,status_code,bytes_sent,response_time_ms,source_ip,user_agent,referrer,severity
+2024-02-20T09:00:01Z,GET,/index.html,200,4521,45,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,"-",INFO
+2024-02-20T09:00:03Z,GET,/about.html,200,2103,32,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,/index.html,INFO
+2024-02-20T09:00:05Z,GET,/contact.html,200,1854,28,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,/about.html,INFO
+2024-02-20T09:00:08Z,GET,/admin,403,512,12,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,"-",MEDIUM
+2024-02-20T09:00:09Z,GET,/admin/,403,512,11,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,"-",MEDIUM
+2024-02-20T09:00:11Z,GET,/admin/login,200,3241,89,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,"-",MEDIUM
+2024-02-20T09:00:15Z,POST,/admin/login,401,245,23,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,/admin/login,HIGH
+2024-02-20T09:00:17Z,POST,/admin/login,401,245,21,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,/admin/login,HIGH
+2024-02-20T09:00:19Z,POST,/admin/login,401,245,22,10.0.0.42,Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,/admin/login,HIGH
+2024-02-20T09:00:22Z,GET,/.env,404,196,8,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:23Z,GET,/.env.production,404,196,7,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:24Z,GET,/.env.local,404,196,8,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:25Z,GET,/wp-admin/,404,196,6,10.0.0.42,python-requests/2.31.0,"-",MEDIUM
+2024-02-20T09:00:26Z,GET,/wp-login.php,404,196,7,10.0.0.42,python-requests/2.31.0,"-",MEDIUM
+2024-02-20T09:00:27Z,GET,/phpmyadmin/,404,196,6,10.0.0.42,python-requests/2.31.0,"-",MEDIUM
+2024-02-20T09:00:28Z,GET,/config.php,404,196,7,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:29Z,GET,/configuration.php,404,196,8,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:30Z,GET,/backup.sql,404,196,6,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:31Z,GET,/backup.zip,404,196,7,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:32Z,GET,/database.sql,404,196,6,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:35Z,GET,/api/users,200,15240,145,10.0.0.42,python-requests/2.31.0,"-",MEDIUM
+2024-02-20T09:00:37Z,GET,/api/users?limit=1000,200,142301,1205,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:41Z,GET,/api/users?limit=1000&offset=0,200,142301,1198,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:00:48Z,GET,/api/admin/users,403,256,9,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:01:02Z,POST,/api/search,500,512,4501,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:01:03Z,POST,/api/search,500,512,4498,10.0.0.42,python-requests/2.31.0,"-",HIGH
+2024-02-20T09:01:10Z,GET,/etc/passwd,400,256,8,10.0.0.42,python-requests/2.31.0,"-",CRITICAL
+2024-02-20T09:01:11Z,GET,/../../../etc/passwd,400,256,7,10.0.0.42,python-requests/2.31.0,"-",CRITICAL
+2024-02-20T09:01:15Z,GET,/api/v1/admin/dump,403,256,9,10.0.0.42,python-requests/2.31.0,"-",CRITICAL
+2024-02-20T09:02:00Z,GET,/index.html,200,4521,44,172.16.0.100,Mozilla/5.0 (Macintosh; Intel Mac OS X),"-",INFO
+2024-02-20T09:02:05Z,GET,/products.html,200,8954,67,172.16.0.100,Mozilla/5.0 (Macintosh; Intel Mac OS X),/index.html,INFO

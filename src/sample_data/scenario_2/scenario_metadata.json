@@ -1,0 +1,24 @@
+{
+  "scenario_id": "scenario_2",
+  "name": "Web Application Reconnaissance and Probing",
+  "description": "Simulated web application attack including directory enumeration, credential stuffing, sensitive file access, API scraping, and path traversal attempts.",
+  "synthetic": true,
+  "files": [
+    {
+      "filename": "web_access.csv",
+      "format": "csv",
+      "source_system": "nginx-webserver",
+      "source_category": "Web Application",
+      "timezone": "UTC",
+      "records": 31
+    }
+  ],
+  "expected_detections": [
+    "Suspicious path access to /admin, /.env, /wp-admin, /config.php",
+    "Multiple failed POST login attempts (HTTP 401)",
+    "Path traversal attempts (/../../../etc/passwd)",
+    "Repeated API enumeration requests from 10.0.0.42",
+    "Server errors (500) following suspicious activity",
+    "User agent change mid-session (browser → python-requests)"
+  ]
+}

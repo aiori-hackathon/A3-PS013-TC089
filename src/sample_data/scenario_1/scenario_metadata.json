@@ -1,0 +1,32 @@
+{
+  "scenario_id": "scenario_1",
+  "name": "Brute-Force Authentication Attack",
+  "description": "Simulated SSH brute-force attack leading to successful authentication, privilege escalation, and data exfiltration.",
+  "synthetic": true,
+  "files": [
+    {
+      "filename": "auth_log.csv",
+      "format": "csv",
+      "source_system": "webserver-01",
+      "source_category": "Linux Host",
+      "timezone": "UTC",
+      "records": 24
+    },
+    {
+      "filename": "firewall.json",
+      "format": "json",
+      "source_system": "perimeter-fw-01",
+      "source_category": "Firewall",
+      "timezone": "UTC",
+      "records": 10
+    }
+  ],
+  "expected_detections": [
+    "Multiple failed login attempts from 192.168.100.5",
+    "Successful login following repeated failures",
+    "Multiple accounts targeted by one source IP",
+    "Privilege escalation via sudo",
+    "Suspicious access to /etc/shadow"
+  ],
+  "attack_narrative": "Attacker from 192.168.100.5 performed an SSH brute-force attack against webserver-01, trying multiple usernames. After 17 failures across 6 usernames, successfully authenticated as 'ubuntu'. Escalated to root via sudo, accessed /etc/shadow and /etc/passwd, created a backdoor user, then exfiltrated data via a reverse connection to port 4444."
+}

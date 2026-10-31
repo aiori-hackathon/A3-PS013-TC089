@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# SQLite database - DO NOT COMMIT (contains investigation data)
+*.db
+*.sqlite
+*.sqlite3
+
+# Evidence storage - NEVER COMMIT (original evidence files)
+evidence_storage/
+!evidence_storage/.gitkeep
+
+# Generated reports - NEVER COMMIT (may contain sensitive data)
+generated_reports/
+!generated_reports/.gitkeep
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite-temp/
+frontend/.tmp/
+
+# Node
+node_modules/
+dist/
+
+# Environment files - NEVER COMMIT
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+!.env.example
+!backend/.env.example
+**/.venv/
+**/venv/
+evidence_storage/.gitkeep
+generated_reports/.gitkeep

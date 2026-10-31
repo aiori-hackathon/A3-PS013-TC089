@@ -1,0 +1,12 @@
+[
+  {"timestamp": "2024-01-15T08:00:00Z", "event": "FIREWALL_BLOCK", "src_ip": "192.168.100.5", "dst_ip": "10.0.0.10", "dst_port": 22, "protocol": "TCP", "action": "ALLOW", "severity": "INFO", "message": "Connection attempt from external host to SSH port"},
+  {"timestamp": "2024-01-15T08:00:01Z", "event": "FIREWALL_ALLOW", "src_ip": "192.168.100.5", "dst_ip": "10.0.0.10", "dst_port": 22, "protocol": "TCP", "action": "ALLOW", "severity": "INFO", "message": "SSH connection established"},
+  {"timestamp": "2024-01-15T08:00:03Z", "event": "FIREWALL_ALLOW", "src_ip": "192.168.100.5", "dst_ip": "10.0.0.10", "dst_port": 22, "protocol": "TCP", "action": "ALLOW", "severity": "INFO", "message": "Continued SSH session traffic"},
+  {"timestamp": "2024-01-15T08:00:30Z", "event": "RATE_LIMIT", "src_ip": "192.168.100.5", "dst_ip": "10.0.0.10", "dst_port": 22, "protocol": "TCP", "action": "MONITOR", "severity": "MEDIUM", "message": "High connection rate from source IP - 15 attempts in 30 seconds"},
+  {"timestamp": "2024-01-15T08:01:00Z", "event": "RATE_LIMIT", "src_ip": "192.168.100.5", "dst_ip": "10.0.0.10", "dst_port": 22, "protocol": "TCP", "action": "MONITOR", "severity": "HIGH", "message": "Sustained high connection rate - possible brute force attack"},
+  {"timestamp": "2024-01-15T08:01:03Z", "event": "FIREWALL_ALLOW", "src_ip": "192.168.100.5", "dst_ip": "10.0.0.10", "dst_port": 22, "protocol": "TCP", "action": "ALLOW", "severity": "HIGH", "message": "Authenticated SSH session established after multiple failures"},
+  {"timestamp": "2024-01-15T08:01:50Z", "event": "OUTBOUND_CONNECTION", "src_ip": "10.0.0.10", "dst_ip": "192.168.100.5", "dst_port": 4444, "protocol": "TCP", "action": "ALLOW", "severity": "CRITICAL", "message": "Suspicious outbound connection to source attacker IP on non-standard port"},
+  {"timestamp": "2024-01-15T08:03:15Z", "event": "DATA_TRANSFER", "src_ip": "10.0.0.10", "dst_ip": "192.168.100.5", "dst_port": 4444, "protocol": "TCP", "action": "ALLOW", "severity": "CRITICAL", "message": "Large data transfer to external IP - 2.3MB outbound"},
+  {"timestamp": "2024-01-15T08:04:10Z", "event": "CONNECTION_CLOSED", "src_ip": "192.168.100.5", "dst_ip": "10.0.0.10", "dst_port": 22, "protocol": "TCP", "action": "ALLOW", "severity": "INFO", "message": "SSH session closed"},
+  {"timestamp": "2024-01-15T08:04:12Z", "event": "CONNECTION_CLOSED", "src_ip": "10.0.0.10", "dst_ip": "192.168.100.5", "dst_port": 4444, "protocol": "TCP", "action": "ALLOW", "severity": "CRITICAL", "message": "Suspicious outbound connection closed"}
+]

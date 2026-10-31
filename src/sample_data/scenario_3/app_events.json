@@ -1,0 +1,100 @@
+[
+  {
+    "ts": "2024-10-30T07:45:10+05:30",
+    "level": "INFO",
+    "service": "auth-service",
+    "message": "User login successful",
+    "user": "appuser",
+    "client_ip": "10.10.0.5",
+    "session_id": "sess_abc123",
+    "request_id": "req_001"
+  },
+  {
+    "ts": "2024-10-30T07:46:15+05:30",
+    "level": "INFO",
+    "service": "api-gateway",
+    "message": "API request processed",
+    "user": "appuser",
+    "client_ip": "10.10.0.5",
+    "path": "/api/v1/reports",
+    "method": "GET",
+    "status": 200,
+    "duration_ms": 145
+  },
+  {
+    "ts": "2024-10-30T07:47:00+05:30",
+    "level": "WARNING",
+    "service": "api-gateway",
+    "message": "Rate limit approaching for client",
+    "client_ip": "10.10.0.5",
+    "requests_per_minute": 58,
+    "limit": 60
+  },
+  {
+    "ts": "2024-10-30T09:15:22+05:30",
+    "level": "ERROR",
+    "service": "database",
+    "message": "Query execution timeout after 30000ms",
+    "user": "ubuntu",
+    "query_partial": "SELECT * FROM users WHERE ...",
+    "duration_ms": 30001,
+    "request_id": "req_555"
+  },
+  {
+    "ts": "2024-10-30T09:15:25+05:30",
+    "level": "ERROR",
+    "service": "database",
+    "message": "Unusual query pattern detected - possible SQL injection attempt",
+    "client_ip": "203.0.113.47",
+    "query_partial": "SELECT * FROM users WHERE id=1 OR 1=1--",
+    "request_id": "req_556"
+  },
+  {
+    "ts": "2024-10-30T09:15:30+05:30",
+    "level": "CRITICAL",
+    "service": "waf",
+    "message": "SQL injection blocked",
+    "client_ip": "203.0.113.47",
+    "rule_triggered": "SQLI_BASIC",
+    "action": "BLOCK",
+    "request_id": "req_557"
+  },
+  {
+    "ts": "2024-10-30T09:16:40+05:30",
+    "level": "INFO",
+    "service": "auth-service",
+    "message": "User login successful after multiple failures",
+    "user": "ubuntu",
+    "client_ip": "203.0.113.47",
+    "failed_attempts_before": 3,
+    "session_id": "sess_xyz789"
+  },
+  {
+    "ts": "2024-10-30T09:17:05+05:30",
+    "level": "WARNING",
+    "service": "file-service",
+    "message": "Access to sensitive configuration file",
+    "user": "ubuntu",
+    "client_ip": "203.0.113.47",
+    "file_path": "/etc/app/database.conf",
+    "operation": "READ"
+  },
+  {
+    "ts": "2024-10-30T09:18:00+05:30",
+    "level": "CRITICAL",
+    "service": "file-service",
+    "message": "Bulk data export initiated",
+    "user": "ubuntu",
+    "client_ip": "203.0.113.47",
+    "records_exported": 15420,
+    "destination": "external-transfer-service"
+  },
+  {
+    "ts": null,
+    "level": "WARNING",
+    "service": "scheduler",
+    "message": "Scheduled task completed with warnings - timestamp unavailable",
+    "task": "backup-routine",
+    "warnings": 3
+  }
+]

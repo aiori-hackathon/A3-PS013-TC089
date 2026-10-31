@@ -1,0 +1,56 @@
+{
+  "scenario_id": "scenario_3",
+  "name": "Multi-Source Incident Reconstruction",
+  "description": "Complex multi-source incident with mixed timezones, clock skew, malformed records, and cross-source correlation requirements.",
+  "synthetic": true,
+  "files": [
+    {
+      "filename": "linux_auth.log",
+      "format": "syslog",
+      "source_system": "appserver-prod",
+      "source_category": "Linux Host",
+      "timezone_note": "No year in syslog timestamps — must be inferred from context",
+      "records_total": 26,
+      "records_malformed": 1,
+      "clock_skew": false
+    },
+    {
+      "filename": "app_events.json",
+      "format": "json",
+      "source_system": "application-stack",
+      "source_category": "Web Application",
+      "timezone": "+05:30",
+      "timezone_note": "Timestamps in IST (+05:30) — must be converted to UTC",
+      "records_total": 10,
+      "records_with_null_timestamp": 1
+    },
+    {
+      "filename": "firewall_events.csv",
+      "format": "csv",
+      "source_system": "perimeter-fw-02",
+      "source_category": "Firewall",
+      "timezone": "UTC",
+      "clock_skew_note": "This firewall is approximately 5 minutes ahead of NTP — noted in data",
+      "records_total": 12,
+      "records_malformed": 2
+    }
+  ],
+  "expected_detections": [
+    "SSH brute force from 203.0.113.47 (visible in syslog and firewall)",
+    "Successful login after repeated failures (cross-source correlation)",
+    "SQL injection attempt from 203.0.113.47",
+    "Privilege escalation (sudo to root)",
+    "Bulk data export (15420 records) to external service",
+    "New user account creation (svc_backup)",
+    "Clock skew warning for firewall source",
+    "Parsing failures in syslog and CSV"
+  ],
+  "complexity_notes": [
+    "Syslog timestamps lack year — must be estimated or marked SYSLOG_NO_YEAR",
+    "App events in IST timezone (+05:30) — must convert to UTC",
+    "Firewall has documented clock skew (~5 minutes)",
+    "One JSON event has null timestamp — must be flagged MISSING",
+    "One syslog line is completely malformed",
+    "Two CSV rows are malformed (wrong column count, missing timestamp)"
+  ]
+}
