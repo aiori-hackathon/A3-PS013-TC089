@@ -1,0 +1,26 @@
+.git
+.gitignore
+README.md
+TC089 AIORI Round 1 PPT.pdf
+
+frontend/node_modules
+frontend/dist
+frontend/.vite-temp
+frontend/.tmp
+
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+
+src/backend/vigilance.db
+src/backend/*.db
+src/evidence_storage
+src/generated_reports
+
+.env
+**/.env
+**/.env.local
+**/.venv
+**/venv

@@ -28,4 +28,7 @@ export const STORAGE_KEYS = {
   ACTIVE_INVESTIGATION_ID: 'vigilance_active_investigation_id'
 } as const;
 
-export const DEFAULT_API_BASE = 'http://localhost:8000/api';
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+
+export const DEFAULT_API_BASE =
+  configuredApiBase || (import.meta.env.DEV ? 'http://localhost:8000/api' : '/api');

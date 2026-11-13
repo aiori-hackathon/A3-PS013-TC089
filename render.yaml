@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: vigilance
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true

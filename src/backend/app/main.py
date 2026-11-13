@@ -3,8 +3,9 @@
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import init_db
@@ -85,6 +86,24 @@ def health_check():
         "storage_ready": Path(settings.EVIDENCE_STORAGE_PATH).exists(),
         "database_ready": True,
     }
+
+
+FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str):
+        """Serve the built SPA and fall back to index.html for client-side routes."""
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        dist_root = FRONTEND_DIST.resolve()
+        requested = (dist_root / full_path).resolve()
+        if requested == dist_root or dist_root in requested.parents:
+            if requested.is_file():
+                return FileResponse(requested)
+
+        return FileResponse(dist_root / "index.html")
 
 
 if __name__ == "__main__":
