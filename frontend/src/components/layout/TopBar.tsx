@@ -30,6 +30,11 @@ export const TopBar: React.FC<TopBarProps> = ({ collapsed }) => {
     return () => clearInterval(interval);
   }, []);
 
+  const selectedInvestigationId =
+    investigations.some((inv) => inv.id === activeInvestigationId)
+      ? activeInvestigationId
+      : investigations[0]?.id || '';
+
   return (
     <header
       className={`fixed top-0 right-0 h-16 bg-[#0d1117]/90 backdrop-blur-md border-b border-[#1e293b] z-20 flex items-center justify-between px-6 transition-all duration-200 ${
@@ -55,13 +60,13 @@ export const TopBar: React.FC<TopBarProps> = ({ collapsed }) => {
           </label>
           <select
             id="topbar-investigation-select"
-            value={activeInvestigationId}
+            value={selectedInvestigationId}
             onChange={(e) => selectActiveInvestigation(e.target.value)}
             disabled={loading || investigations.length === 0}
             className="w-full bg-[#111827] border border-[#1e293b] text-slate-200 text-xs rounded-md px-2.5 py-1.5 focus:outline-none focus:border-sky-500 font-mono transition-colors cursor-pointer truncate"
           >
             {investigations.length === 0 ? (
-              <option value="">No Active Investigations</option>
+              <option value="">{loading ? 'Loading cases...' : 'No Active Investigations'}</option>
             ) : (
               investigations.map((inv) => (
                 <option key={inv.id} value={inv.id}>

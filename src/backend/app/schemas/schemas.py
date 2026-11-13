@@ -66,6 +66,7 @@ class EvidenceFileResponse(BaseModel):
 
 
 class EvidenceVerifyResponse(BaseModel):
+    id: str
     verification_id: str
     evidence_id: str
     verified_at: datetime
@@ -73,6 +74,18 @@ class EvidenceVerifyResponse(BaseModel):
     recalculated_hash: str
     result: str  # MATCH, MISMATCH, ERROR
     notes: Optional[str] = None
+
+
+class IntegrityVerificationResponse(BaseModel):
+    id: str
+    evidence_id: str
+    verified_at: datetime
+    original_hash: str
+    recalculated_hash: str
+    result: str  # MATCH, MISMATCH, ERROR
+    notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EvidenceUploadSummary(BaseModel):
@@ -130,6 +143,12 @@ class ProcessingSummaryResponse(BaseModel):
     timestamp_status_counts: Dict[str, int]
     severity_counts: Dict[str, int]
     category_counts: Dict[str, int]
+    total_files: int = 0
+    total_records: int = 0
+    parsed_ok: int = 0
+    parsed_partial: int = 0
+    parsed_failed: int = 0
+    missing_timestamps: int = 0
 
 
 # ==========================================
@@ -172,6 +191,7 @@ class ReportGenerateRequest(BaseModel):
 class ReportResponse(BaseModel):
     id: str
     investigation_id: str
+    filename: str
     format: str
     file_path: str
     generated_at: datetime

@@ -56,7 +56,13 @@ export const TriageComparison: React.FC = () => {
   }, [selectedInvId]);
 
   const loadTriageData = useCallback(async () => {
-    if (!selectedInvId) return;
+    if (!selectedInvId) {
+      setManualMeasurement(null);
+      setVigilanceMeasurement(null);
+      setProcessingSummary(null);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const [triageRes, summaryRes, invRes] = await Promise.allSettled([
@@ -70,8 +76,8 @@ export const TriageComparison: React.FC = () => {
 
       if (triageRes.status === 'fulfilled' && Array.isArray(triageRes.value.data)) {
         const measurements = triageRes.value.data;
-        manualM = measurements.find((m) => m.method === 'MANUAL') || null;
-        vigilanceM = measurements.find((m) => m.method === 'VIGILANCE') || null;
+        manualM = [...measurements].reverse().find((m) => m.method === 'MANUAL') || null;
+        vigilanceM = [...measurements].reverse().find((m) => m.method === 'VIGILANCE') || null;
       }
 
       let summary: ProcessingSummary | null = null;
@@ -128,11 +134,13 @@ export const TriageComparison: React.FC = () => {
 
     try {
       setSavingManual(true);
-      const durationSeconds = manualDurationMinutes * 60;
+      const endTime = new Date();
+      const startTime = new Date(endTime.getTime() - manualDurationMinutes * 60 * 1000);
       const res = await investigationsApi.createTriage(selectedInvId, {
         method: 'MANUAL',
         scenario: scenarioName,
-        duration_seconds: durationSeconds,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
         events_identified: Number(manualEventsIdentified),
         records_processed: Number(manualRecordsCount),
         notes: manualNotes,

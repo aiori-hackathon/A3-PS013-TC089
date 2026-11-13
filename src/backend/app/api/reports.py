@@ -23,6 +23,7 @@ def _report_to_response(rep: InvestigationReport) -> ReportResponse:
     return ReportResponse(
         id=rep.id,
         investigation_id=rep.investigation_id,
+        filename=Path(rep.file_path).name,
         format=rep.format,
         file_path=rep.file_path,
         generated_at=rep.generated_at,

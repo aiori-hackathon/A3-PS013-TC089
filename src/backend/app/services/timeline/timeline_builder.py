@@ -124,4 +124,10 @@ class TimelineBuilder:
             "timestamp_status_counts": ts_counts,
             "severity_counts": sev_counts,
             "category_counts": cat_counts,
+            "total_files": evidence_count,
+            "total_records": len(events),
+            "parsed_ok": status_counts.get("OK", 0),
+            "parsed_partial": status_counts.get("PARTIAL", 0),
+            "parsed_failed": status_counts.get("FAILED", 0),
+            "missing_timestamps": ts_counts.get("MISSING", 0),
         }

@@ -40,6 +40,7 @@ export const Timeline: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [expandedRawIds, setExpandedRawIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -63,31 +64,43 @@ export const Timeline: React.FC = () => {
   }, [searchParams, selectedInvId]);
 
   const loadTimelineEvents = useCallback(async () => {
-    if (!selectedInvId) return;
+    if (!selectedInvId) {
+      setEvents([]);
+      setUncertainEvents([]);
+      setTotalPages(1);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await investigationsApi.getTimeline(selectedInvId, {
         search: searchTerm || undefined,
-        source_ip: ipFilter || undefined,
+        ip: ipFilter || undefined,
         username: userFilter || undefined,
         severity: severityFilter === 'ALL' ? undefined : severityFilter,
-        event_category: categoryFilter === 'ALL' ? undefined : categoryFilter,
-        sort_order: sortOrder,
+        category: categoryFilter === 'ALL' ? undefined : categoryFilter,
+        sort_asc: sortOrder === 'asc',
         page,
-        limit: 50,
+        page_size: 50,
       });
 
       if (res.data && 'events' in res.data) {
         setEvents(res.data.events || []);
         setUncertainEvents(res.data.uncertain_events || []);
+        setTotalPages(
+          res.data.total_pages ||
+            Math.max(1, Math.ceil((res.data.total || 0) / 50))
+        );
       } else if (Array.isArray(res.data)) {
         setEvents(res.data);
         setUncertainEvents([]);
+        setTotalPages(1);
       }
     } catch {
       toast.error('Failed to load timeline events');
       setEvents([]);
       setUncertainEvents([]);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -220,12 +233,16 @@ export const Timeline: React.FC = () => {
                   }}
                 >
                   <option value="ALL">All Event Types</option>
-                  <option value="Authentication">Authentication</option>
-                  <option value="Network Connection">Network Connection</option>
-                  <option value="Process Creation">Process Creation</option>
-                  <option value="File Modification">File Modification</option>
-                  <option value="Privilege Escalation">Privilege Escalation</option>
-                  <option value="Web Request">Web Request</option>
+                  <option value="LOGIN_FAILURE">Failed Login</option>
+                  <option value="LOGIN_SUCCESS">Successful Login</option>
+                  <option value="NETWORK_CONNECTION">Network Connection</option>
+                  <option value="SSH_CONNECTION">SSH Connection</option>
+                  <option value="PRIVILEGE_CHANGE">Privilege Change</option>
+                  <option value="FILE_ACCESS">File Access</option>
+                  <option value="ACCOUNT_CHANGE">Account Change</option>
+                  <option value="APPLICATION_ERROR">Application Error</option>
+                  <option value="HTTP_REQUEST">HTTP Request</option>
+                  <option value="UNCATEGORIZED">Uncategorized</option>
                 </Select>
               </div>
             </div>
@@ -333,7 +350,7 @@ export const Timeline: React.FC = () => {
 
           {/* Pagination */}
           <div className="flex items-center justify-between pt-4 border-t border-[#1e293b] text-xs font-mono text-slate-400">
-            <span>Showing page {page} (50 events/page)</span>
+            <span>Showing page {page} of {totalPages} (50 events/page)</span>
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
@@ -346,7 +363,7 @@ export const Timeline: React.FC = () => {
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={events.length < 50}
+                disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
                 Next

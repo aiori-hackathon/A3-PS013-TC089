@@ -26,6 +26,19 @@ export interface EvidenceFile {
   timezone_hint?: string;
 }
 
+export interface EvidenceUploadSummary {
+  evidence_id: string;
+  filename: string;
+  file_size: number;
+  sha256: string;
+  detected_format: string;
+  records_processed: number;
+  parsed_ok: number;
+  parsed_partial: number;
+  parsed_failed: number;
+  missing_timestamps: number;
+}
+
 export interface Event {
   id: string;
   investigation_id: string;
@@ -60,7 +73,7 @@ export interface DetectionAlert {
   id: string;
   investigation_id: string;
   rule_name: string;
-  severity: 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
+  severity: 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   explanation: string;
   event_ids: string[];
   ip_addresses: string[];
@@ -98,13 +111,18 @@ export interface TriageMeasurement {
 
 export interface DashboardStats {
   total_investigations: number;
+  active_investigations?: number;
   total_evidence_files: number;
   total_events: number;
+  total_alerts?: number;
+  critical_alerts?: number;
+  avg_triage_time_saved_percent?: number;
   parsed_ok: number;
   parsed_failed: number;
   integrity_verified: number;
   suspicious_events: number;
   recent_investigations: Investigation[];
+  recent_alerts?: DetectionAlert[];
   recent_evidence: EvidenceFile[];
   events_by_severity: Array<{ severity: string; count: number }>;
   events_by_category: Array<{ category: string; count: number }>;
@@ -118,22 +136,29 @@ export interface ProcessingSummary {
   parsed_partial: number;
   parsed_failed: number;
   missing_timestamps: number;
-  jobs: ProcessingJob[];
+  jobs?: ProcessingJob[];
+  total_evidence_files?: number;
+  total_events?: number;
+  status_counts?: Record<string, number>;
+  timestamp_status_counts?: Record<string, number>;
+  severity_counts?: Record<string, number>;
+  category_counts?: Record<string, number>;
 }
 
 export interface DemoScenario {
   id: string;
   name: string;
   description: string;
-  category: string;
-  records_count?: number;
-  evidence_files?: string[];
+  difficulty: string;
+  source_types: string[];
+  file_count: number;
+  expected_findings?: string[];
 }
 
 export interface ReportItem {
   id?: string;
   investigation_id: string;
-  filename: string;
+  filename?: string;
   format: 'PDF' | 'CSV' | 'JSON' | string;
   file_size?: number;
   generated_at: string;
@@ -141,8 +166,13 @@ export interface ReportItem {
 }
 
 export interface TriageComparisonData {
-  manual?: TriageMeasurement;
-  vigilance?: TriageMeasurement;
+  scenario: string;
+  investigation_id: string;
+  manual_duration_seconds?: number;
+  vigilance_duration_seconds?: number;
   time_saved_seconds?: number;
-  percentage_reduction?: number;
+  speedup_factor?: number;
+  efficiency_gain_percent?: number;
+  manual_events_identified?: number;
+  vigilance_events_identified?: number;
 }

@@ -149,7 +149,7 @@ def load_demo_scenario(payload: LoadScenarioRequest, db: Session = Depends(get_d
 
     if sample_dir.is_dir():
         for file_path in sample_dir.glob("*"):
-            if file_path.suffix.lower() in settings.ALLOWED_EXTENSIONS and file_path.name != "scenario.json":
+            if file_path.suffix.lower() in settings.ALLOWED_EXTENSIONS and file_path.name not in {"scenario.json", "scenario_metadata.json"}:
                 try:
                     with open(file_path, "rb") as f:
                         file_bytes = f.read()

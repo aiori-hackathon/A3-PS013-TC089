@@ -41,6 +41,26 @@ export function useInvestigations() {
     fetchInvestigations();
   }, [fetchInvestigations]);
 
+  useEffect(() => {
+    const refresh = () => {
+      fetchInvestigations();
+    };
+    const refreshOnFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchInvestigations();
+      }
+    };
+
+    window.addEventListener('vigilance_investigations_changed', refresh);
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnFocus);
+    return () => {
+      window.removeEventListener('vigilance_investigations_changed', refresh);
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnFocus);
+    };
+  }, [fetchInvestigations]);
+
   const selectActiveInvestigation = (id: string) => {
     setActiveInvestigationId(id);
     localStorage.setItem(STORAGE_KEYS.ACTIVE_INVESTIGATION_ID, id);

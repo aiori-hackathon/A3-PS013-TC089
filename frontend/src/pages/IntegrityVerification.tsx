@@ -52,27 +52,39 @@ export const IntegrityVerificationPage: React.FC = () => {
   }, [selectedInvId]);
 
   const loadEvidence = useCallback(async () => {
-    if (!selectedInvId) return;
+    if (!selectedInvId) {
+      setEvidenceList([]);
+      setHistory([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await investigationsApi.getEvidence(selectedInvId);
       const evs = Array.isArray(res.data) ? res.data : [];
       setEvidenceList(evs);
 
-      // Load verifications for the first file or all
+      // Load verification history across every evidence file in the case
       if (evs.length > 0) {
-        try {
-          const histRes = await evidenceApi.getVerifications(evs[0].id);
-          if (Array.isArray(histRes.data)) {
-            setHistory(histRes.data);
-          }
-        } catch {
-          // ignore if history endpoint returns empty
-        }
+        const histResults = await Promise.allSettled(
+          evs.map((ev) => evidenceApi.getVerifications(ev.id))
+        );
+        const combined = histResults.flatMap((result) =>
+          result.status === 'fulfilled' && Array.isArray(result.value.data)
+            ? result.value.data
+            : []
+        );
+        combined.sort(
+          (a, b) => new Date(b.verified_at).getTime() - new Date(a.verified_at).getTime()
+        );
+        setHistory(combined);
+      } else {
+        setHistory([]);
       }
     } catch {
       toast.error('Failed to load evidence files for case');
       setEvidenceList([]);
+      setHistory([]);
     } finally {
       setLoading(false);
     }

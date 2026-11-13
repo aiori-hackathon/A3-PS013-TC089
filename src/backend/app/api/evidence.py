@@ -21,6 +21,7 @@ from app.schemas.schemas import (
     EvidenceFileResponse,
     EvidenceVerifyResponse,
     EvidenceUploadSummary,
+    IntegrityVerificationResponse,
 )
 from app.services.ingestion.ingestor import IngestionService
 from app.services.hashing.hasher import calculate_sha256
@@ -87,6 +88,16 @@ async def upload_evidence(
             )
 
     return summaries
+
+
+@router.get("/evidence", response_model=List[EvidenceFileResponse])
+def list_all_evidence(db: Session = Depends(get_db)):
+    """List all evidence files across every investigation."""
+    return (
+        db.query(EvidenceFile)
+        .order_by(EvidenceFile.upload_timestamp.desc())
+        .all()
+    )
 
 
 @router.get("/evidence/{evidence_id}", response_model=EvidenceFileResponse)
@@ -171,6 +182,7 @@ def verify_evidence_integrity(evidence_id: str, db: Session = Depends(get_db)):
         db.add(verification)
         db.commit()
         return EvidenceVerifyResponse(
+            id=verification.id,
             verification_id=verification.id,
             evidence_id=evidence.id,
             verified_at=verification.verified_at,
@@ -213,6 +225,7 @@ def verify_evidence_integrity(evidence_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return EvidenceVerifyResponse(
+        id=verification.id,
         verification_id=verification.id,
         evidence_id=evidence.id,
         verified_at=verification.verified_at,
@@ -220,6 +233,24 @@ def verify_evidence_integrity(evidence_id: str, db: Session = Depends(get_db)):
         recalculated_hash=recalculated_hash,
         result=result_str,
         notes=notes,
+    )
+
+
+@router.get("/evidence/{evidence_id}/verifications", response_model=List[IntegrityVerificationResponse])
+def list_evidence_verifications(evidence_id: str, db: Session = Depends(get_db)):
+    """List the complete integrity verification history for an evidence artifact."""
+    evidence = db.query(EvidenceFile).filter(EvidenceFile.id == evidence_id).first()
+    if not evidence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evidence file '{evidence_id}' was not found."
+        )
+
+    return (
+        db.query(IntegrityVerification)
+        .filter(IntegrityVerification.evidence_id == evidence_id)
+        .order_by(IntegrityVerification.verified_at.desc())
+        .all()
     )
 
 

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { investigationsApi, evidenceApi } from '../services/api';
-import type { Investigation, EvidenceFile } from '../types';
+import type { Investigation, EvidenceUploadSummary } from '../types';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -28,7 +28,7 @@ interface QueuedFile {
   timezoneHint: string;
   progress: number;
   status: 'idle' | 'uploading' | 'completed' | 'error';
-  result?: EvidenceFile;
+  result?: EvidenceUploadSummary;
   errorMessage?: string;
 }
 
@@ -145,6 +145,7 @@ export const LogIngestion: React.FC = () => {
         targetInvId = createRes.data.id;
         setSelectedInvId(targetInvId);
         setIsCreatingNewInv(false);
+        window.dispatchEvent(new Event('vigilance_investigations_changed'));
       } catch {
         toast.error('Failed to create new investigation for upload');
         return;
@@ -163,14 +164,13 @@ export const LogIngestion: React.FC = () => {
 
     setIsUploading(true);
 
-    for (let i = 0; i < queuedFiles.length; i++) {
-      const item = queuedFiles[i];
+    for (const [i, item] of queuedFiles.entries()) {
       if (item.status === 'completed') continue;
 
       updateQueuedFile(i, { status: 'uploading', progress: 10 });
 
       const formData = new FormData();
-      formData.append('file', item.file);
+      formData.append('files', item.file);
       formData.append('investigation_id', targetInvId);
       formData.append('source_system', item.sourceSystem);
       formData.append('source_category', item.sourceCategory);
@@ -186,10 +186,11 @@ export const LogIngestion: React.FC = () => {
           }
         });
 
+        const uploaded = Array.isArray(res.data) ? res.data[0] : res.data;
         updateQueuedFile(i, {
           status: 'completed',
           progress: 100,
-          result: res.data,
+          result: uploaded,
         });
         toast.success(`Ingested & parsed: ${item.file.name}`);
       } catch (err: unknown) {
@@ -430,10 +431,10 @@ export const LogIngestion: React.FC = () => {
                   <div className="bg-[#111827] p-3 rounded border border-[#1e293b] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
                     <div className="flex items-center gap-2">
                       <span className="text-slate-500 uppercase text-[11px]">Computed SHA-256:</span>
-                      <HashDisplay hash={item.result?.sha256_hash || ''} truncate />
+                      <HashDisplay hash={item.result?.sha256 || ''} truncate />
                     </div>
                     <div className="flex items-center gap-3 text-slate-400">
-                      <span>Status: {item.result?.processing_status || 'PARSED'}</span>
+                      <span>Status: {item.result ? 'COMPLETED' : 'PARSED'}</span>
                       <Button
                         size="sm"
                         variant="ghost"

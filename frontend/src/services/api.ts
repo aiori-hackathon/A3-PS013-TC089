@@ -3,6 +3,7 @@ import { STORAGE_KEYS, DEFAULT_API_BASE } from '../utils/constants';
 import type {
   Investigation,
   EvidenceFile,
+  EvidenceUploadSummary,
   Event,
   IntegrityVerification,
   DetectionAlert,
@@ -50,28 +51,26 @@ export interface UpdateInvestigationPayload {
 
 export interface EventQueryParams {
   search?: string;
-  source_ip?: string;
-  dest_ip?: string;
+  ip?: string;
   username?: string;
-  event_category?: string;
+  category?: string;
   severity?: string;
-  start_time?: string;
-  end_time?: string;
-  evidence_id?: string;
-  sort_order?: 'asc' | 'desc';
+  source?: string;
+  start_date?: string;
+  end_date?: string;
+  sort_asc?: boolean;
   page?: number;
-  limit?: number;
+  page_size?: number;
 }
 
 export interface CreateTriagePayload {
   method: 'MANUAL' | 'VIGILANCE';
   scenario: string;
-  duration_seconds: number;
+  start_time: string;
+  end_time: string;
   events_identified: number;
   records_processed: number;
   notes?: string;
-  start_time?: string;
-  end_time?: string;
 }
 
 // Investigations
@@ -83,9 +82,9 @@ export const investigationsApi = {
   delete: (id: string) => api.delete<{ success: boolean; message?: string }>(`/investigations/${id}`),
   archive: (id: string) => api.post<Investigation>(`/investigations/${id}/archive`),
   getEvents: (id: string, params?: EventQueryParams) =>
-    api.get<{ events: Event[]; total: number; page?: number; limit?: number } | Event[]>(`/investigations/${id}/events`, { params }),
+    api.get<{ events: Event[]; total: number; page?: number; page_size?: number; total_pages?: number } | Event[]>(`/investigations/${id}/events`, { params }),
   getTimeline: (id: string, params?: EventQueryParams) =>
-    api.get<{ events: Event[]; uncertain_events?: Event[]; total?: number } | Event[]>(`/investigations/${id}/timeline`, { params }),
+    api.get<{ events: Event[]; uncertain_events?: Event[]; total?: number; page?: number; page_size?: number; total_pages?: number } | Event[]>(`/investigations/${id}/timeline`, { params }),
   getAlerts: (id: string) => api.get<DetectionAlert[]>(`/investigations/${id}/alerts`),
   analyze: (id: string) => api.post<{ alerts: DetectionAlert[]; count: number; message?: string }>(`/investigations/${id}/analyze`),
   getEvidence: (id: string) => api.get<EvidenceFile[]>(`/investigations/${id}/evidence`),
@@ -104,7 +103,7 @@ export const investigationsApi = {
 export const evidenceApi = {
   listAll: () => api.get<EvidenceFile[]>('/evidence'),
   upload: (formData: FormData, onUploadProgress?: (progressEvent: { loaded: number; total?: number }) => void) =>
-    api.post<EvidenceFile>('/evidence/upload', formData, {
+    api.post<EvidenceUploadSummary[]>('/evidence/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress
     }),
@@ -117,8 +116,16 @@ export const evidenceApi = {
 // Demo
 export const demoApi = {
   getScenarios: () => api.get<DemoScenario[]>('/demo/scenarios'),
-  loadScenario: (scenario_name: string) =>
-    api.post<{ success: boolean; investigation_id: string; message: string }>('/demo/load-scenario', { scenario_name }),
+  loadScenario: (scenario_id: string) =>
+    api.post<{
+      investigation_id: string;
+      investigation_name: string;
+      scenario_id: string;
+      files_ingested: number;
+      total_events: number;
+      total_alerts: number;
+      status: string;
+    }>('/demo/load-scenario', { scenario_id }),
 };
 
 // Dashboard

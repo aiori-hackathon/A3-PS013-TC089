@@ -7,7 +7,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { investigationsApi } from '../services/api';
+import { investigationsApi, getBackendRootUrl } from '../services/api';
 import type { Investigation, ReportItem } from '../types';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -42,7 +42,11 @@ export const Reports: React.FC = () => {
   }, [selectedInvId]);
 
   const loadReports = useCallback(async () => {
-    if (!selectedInvId) return;
+    if (!selectedInvId) {
+      setReports([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await investigationsApi.getReports(selectedInvId);
@@ -63,7 +67,7 @@ export const Reports: React.FC = () => {
     if (!selectedInvId) return;
     try {
       setGenerating(true);
-      const res = await investigationsApi.generateReport(selectedInvId, selectedFormat);
+      const res = await investigationsApi.generateReport(selectedInvId, selectedFormat.toLowerCase());
       toast.success(`${selectedFormat} forensic report created`);
       if (res.data) {
         setReports((prev) => [res.data, ...prev]);
@@ -204,7 +208,7 @@ export const Reports: React.FC = () => {
                     </TableCell>
                     <TableCell className="text-right">
                       <a
-                        href={rep.download_url || '#'}
+                        href={rep.download_url ? `${getBackendRootUrl()}${rep.download_url}` : '#'}
                         download={rep.filename}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono bg-[#1a2235] text-sky-400 hover:bg-[#243049] border border-[#1e293b] transition-colors"
                       >

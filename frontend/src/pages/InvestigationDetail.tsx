@@ -16,7 +16,7 @@ import {
   Archive,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { investigationsApi, evidenceApi } from '../services/api';
+import { investigationsApi, evidenceApi, getBackendRootUrl } from '../services/api';
 import type {
   Investigation,
   EvidenceFile,
@@ -61,6 +61,7 @@ export const InvestigationDetail: React.FC = () => {
   const [eventSeverity, setEventSeverity] = useState('ALL');
   const [eventPage, setEventPage] = useState(1);
   const [totalEvents, setTotalEvents] = useState(0);
+  const [eventTotalPages, setEventTotalPages] = useState(1);
 
   // Raw Event Modal
   const [selectedRawEvent, setSelectedRawEvent] = useState<Event | null>(null);
@@ -96,15 +97,20 @@ export const InvestigationDetail: React.FC = () => {
         search: eventSearch || undefined,
         severity: eventSeverity === 'ALL' ? undefined : eventSeverity,
         page: eventPage,
-        limit: 50,
+        page_size: 50,
       });
 
       if (res.data && 'events' in res.data) {
         setEventsList(res.data.events || []);
         setTotalEvents(res.data.total || (res.data.events || []).length);
+        setEventTotalPages(
+          res.data.total_pages ||
+            Math.max(1, Math.ceil((res.data.total || 0) / 50))
+        );
       } else if (Array.isArray(res.data)) {
         setEventsList(res.data);
         setTotalEvents(res.data.length);
+        setEventTotalPages(1);
       }
     } catch {
       setEventsList([]);
@@ -159,7 +165,7 @@ export const InvestigationDetail: React.FC = () => {
     if (!id) return;
     try {
       setGeneratingReport(format);
-      await investigationsApi.generateReport(id, format);
+      await investigationsApi.generateReport(id, format.toLowerCase());
       toast.success(`${format} forensic report generated successfully`);
       const reportsRes = await investigationsApi.getReports(id);
       setReportsList(Array.isArray(reportsRes.data) ? reportsRes.data : []);
@@ -601,11 +607,11 @@ export const InvestigationDetail: React.FC = () => {
                 >
                   Previous
                 </Button>
-                <span>Page {eventPage}</span>
+                <span>Page {eventPage} of {eventTotalPages}</span>
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={eventsList.length < 50}
+                  disabled={eventPage >= eventTotalPages}
                   onClick={() => setEventPage((p) => p + 1)}
                 >
                   Next
@@ -772,7 +778,7 @@ export const InvestigationDetail: React.FC = () => {
                       </TableCell>
                       <TableCell className="text-right">
                         <a
-                          href={rep.download_url || '#'}
+                          href={rep.download_url ? `${getBackendRootUrl()}${rep.download_url}` : '#'}
                           download={rep.filename}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded bg-[#1a2235] text-sky-400 hover:bg-[#243049] border border-[#1e293b]"
                         >

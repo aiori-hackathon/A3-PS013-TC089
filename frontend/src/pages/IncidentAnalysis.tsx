@@ -48,7 +48,11 @@ export const IncidentAnalysis: React.FC = () => {
   }, [selectedInvId]);
 
   const loadAlerts = useCallback(async () => {
-    if (!selectedInvId) return;
+    if (!selectedInvId) {
+      setAlerts([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await investigationsApi.getAlerts(selectedInvId);
@@ -84,7 +88,7 @@ export const IncidentAnalysis: React.FC = () => {
     setLoadingEvents(true);
     try {
       // Fetch all case events and filter by alert.event_ids
-      const res = await investigationsApi.getEvents(alert.investigation_id, { limit: 200 });
+      const res = await investigationsApi.getEvents(alert.investigation_id, { page_size: 200 });
       let allEvs: Event[] = [];
       if (res.data && 'events' in res.data) {
         allEvs = res.data.events;

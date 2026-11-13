@@ -63,6 +63,10 @@ export const Investigations: React.FC = () => {
     }
   }, []);
 
+  const notifyInvestigationsChanged = () => {
+    window.dispatchEvent(new Event('vigilance_investigations_changed'));
+  };
+
   const fetchDemoScenarios = useCallback(async () => {
     try {
       const res = await demoApi.getScenarios();
@@ -70,30 +74,7 @@ export const Investigations: React.FC = () => {
         setDemoScenarios(res.data);
       }
     } catch {
-      // Demo scenarios fallback default list if backend endpoint returns empty
-      setDemoScenarios([
-        {
-          id: 'apt-lateral-movement',
-          name: 'APT-29 Lateral Movement & Credential Dumping',
-          description: 'Multi-host Windows security logs, Sysmon process creation, and Mimikatz execution telemetry.',
-          category: 'Unauthorized Access',
-          records_count: 14200,
-        },
-        {
-          id: 'insider-data-exfiltration',
-          name: 'Insider Threat: Cloud Storage Data Exfiltration',
-          description: 'Web proxy and AWS CloudTrail audit logs showing abnormal volume transfer after work hours.',
-          category: 'Data Breach',
-          records_count: 8900,
-        },
-        {
-          id: 'ransomware-staging',
-          name: 'LockBit Ransomware Canary & File Encryption',
-          description: 'Endpoint file modification velocity, shadow copy deletion commands, and C2 beaconing.',
-          category: 'Malware',
-          records_count: 5600,
-        },
-      ]);
+      setDemoScenarios([]);
     }
   }, []);
 
@@ -121,6 +102,7 @@ export const Investigations: React.FC = () => {
       setName('');
       setDescription('');
       fetchInvestigations();
+      notifyInvestigationsChanged();
       if (res.data?.id) {
         navigate(`/investigations/${res.data.id}`);
       }
@@ -137,6 +119,7 @@ export const Investigations: React.FC = () => {
       await investigationsApi.archive(id);
       toast.success('Investigation case archived');
       fetchInvestigations();
+      notifyInvestigationsChanged();
     } catch {
       toast.error('Failed to archive investigation');
     }
@@ -150,6 +133,7 @@ export const Investigations: React.FC = () => {
       toast.success('Investigation deleted');
       setDeleteTarget(null);
       fetchInvestigations();
+      notifyInvestigationsChanged();
     } catch {
       toast.error('Failed to delete investigation');
     } finally {
@@ -161,8 +145,13 @@ export const Investigations: React.FC = () => {
     try {
       setLoadingScenario(scenarioName);
       const res = await demoApi.loadScenario(scenarioName);
-      toast.success(res.data?.message || 'Demo scenario loaded successfully');
+      toast.success(
+        res.data?.status
+          ? `Demo scenario loaded: ${res.data.total_events} events, ${res.data.total_alerts} alerts`
+          : 'Demo scenario loaded successfully'
+      );
       fetchInvestigations();
+      notifyInvestigationsChanged();
       if (res.data?.investigation_id) {
         navigate(`/investigations/${res.data.investigation_id}`);
       }
@@ -371,12 +360,10 @@ export const Investigations: React.FC = () => {
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <Badge variant="INFO" size="sm" label={scenario.category} />
-                  {scenario.records_count && (
-                    <span className="text-[11px] font-mono text-slate-400">
-                      ~{scenario.records_count.toLocaleString()} recs
-                    </span>
-                  )}
+                  <Badge variant="INFO" size="sm" label={scenario.difficulty} />
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {scenario.file_count} {scenario.file_count === 1 ? 'file' : 'files'}
+                  </span>
                 </div>
                 <h3 className="font-semibold text-slate-100 text-sm mb-1.5">
                   {scenario.name}

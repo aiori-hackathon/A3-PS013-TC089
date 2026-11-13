@@ -75,6 +75,7 @@ desktop.ini
 # Logs
 *.log
 logs/
+!src/sample_data/**/*.log
 
 # Temporary files
 *.tmp
