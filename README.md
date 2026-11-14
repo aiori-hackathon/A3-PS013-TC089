@@ -12,6 +12,15 @@
 [Watch our Team Introduction & Problem Overview on YouTube](https://youtu.be/wswCH0Zga0A)
 
 ---
+## Project Demonstration
+
+Watch the complete working demonstration of **Vigilance**, developed for AIORI Hackathon 3, Problem Statement PS-013: Incident Timeline and Evidence Collection.
+
+[![Vigilance Demo](https://img.youtube.com/vi/rezQo_kvrec/maxresdefault.jpg)](https://youtu.be/rezQo_kvrec)
+
+**[▶ Watch the Full Project Demonstration on YouTube](https://youtu.be/rezQo_kvrec?si=gAwsindLj3jWXrqa)**
+
+---
 
 ## Team and Mentorship Structure
 
