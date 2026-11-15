@@ -1,5 +1,6 @@
 """Unit tests for CSV, JSON, and Syslog forensic parsers."""
 
+import io
 import json
 from app.services.parsing.csv_parser import CSVParser
 from app.services.parsing.json_parser import JSONParser
@@ -130,3 +131,41 @@ def test_syslog_line_parsing():
     assert rec4.username == "administrator"
     assert rec4.source_ip == "10.10.10.200"
     assert rec4.event_category == "LOGIN_FAILURE"
+
+
+def test_syslog_parser_streams_without_loading_full_content():
+    """Verify syslog streaming yields records incrementally from a text stream."""
+    content = """Oct 30 10:15:23 hostname sshd[1234]: Failed password for hacker from 192.168.1.1 port 22 ssh2
+Oct 30 10:15:30 hostname sshd[1234]: Accepted password for deploy from 192.168.1.1 port 22 ssh2
+"""
+    parser = SyslogParser()
+    records = list(parser.parse_stream(io.StringIO(content)))
+    assert len(records) == 2
+    assert records[0].event_category == "LOGIN_FAILURE"
+    assert records[1].event_category == "LOGIN_SUCCESS"
+
+
+def test_csv_parser_streams_from_seekable_text_stream():
+    """Verify CSV streaming preserves field extraction and row counts."""
+    content = """timestamp,source_ip,username,message
+2026-10-30T10:15:00Z,192.168.1.100,admin,Failed password for admin
+2026-10-30T10:15:05Z,192.168.1.100,admin,Accepted password for admin
+"""
+    parser = CSVParser()
+    records = list(parser.parse_stream(io.StringIO(content)))
+    assert len(records) == 2
+    assert records[0].source_ip == "192.168.1.100"
+    assert records[1].event_category == "LOGIN_SUCCESS"
+
+
+def test_json_parser_streams_ndjson():
+    """Verify NDJSON is decoded one line at a time."""
+    lines = [
+        json.dumps({"timestamp": "2026-10-30T10:00:00Z", "src_ip": "10.0.0.1", "message": "one"}),
+        json.dumps({"timestamp": "2026-10-30T10:00:01Z", "src_ip": "10.0.0.2", "message": "two"}),
+    ]
+    parser = JSONParser()
+    records = list(parser.parse_stream(io.StringIO("\n".join(lines) + "\n")))
+    assert len(records) == 2
+    assert records[0].source_ip == "10.0.0.1"
+    assert records[1].source_ip == "10.0.0.2"

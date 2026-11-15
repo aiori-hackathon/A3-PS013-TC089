@@ -1,7 +1,7 @@
 """Forensic Syslog / Linux auth.log parser."""
 
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterator, TextIO
 from app.services.parsing.base_parser import BaseParser, ParsedRecord
 from app.services.normalization.event_normalizer import categorize_event, normalize_severity
 
@@ -38,7 +38,7 @@ SSHD_INVALID_USER = re.compile(
 )
 
 SUDO_EXEC = re.compile(
-    r"sudo:\s*(?P<user>\S+)\s*:\s*TTY=(?P<tty>\S*)\s*;\s*PWD=(?P<pwd>[^;]*)\s*;\s*USER=(?P<target_user>\S+)\s*;\s*COMMAND=(?P<cmd>.*)",
+    r"(?:sudo:\s*)?(?P<user>\S+)\s*:\s*TTY=(?P<tty>\S*)\s*;\s*PWD=(?P<pwd>[^;]*)\s*;\s*USER=(?P<target_user>\S+)\s*;\s*COMMAND=(?P<cmd>.*)",
     re.IGNORECASE
 )
 
@@ -166,17 +166,16 @@ class SyslogParser(BaseParser):
         record.evaluate_status()
         return record
 
-    def parse(self, content: str, default_source: Optional[str] = "Linux System") -> List[ParsedRecord]:
-        """Parse full syslog text into ParsedRecord list."""
-        records: List[ParsedRecord] = []
-        if not content or not content.strip():
-            return records
-
-        lines = content.splitlines()
-        for line in lines:
+    def parse_stream(self, stream: TextIO, default_source: Optional[str] = "Linux System") -> Iterator[ParsedRecord]:
+        """Parse syslog lines lazily without loading the full artifact into memory."""
+        for line in stream:
             line_str = line.strip()
             if not line_str:
                 continue
-            records.append(self.parse_line(line_str, default_source=default_source))
+            yield self.parse_line(line_str, default_source=default_source)
 
-        return records
+    def parse(self, content: str, default_source: Optional[str] = "Linux System") -> List[ParsedRecord]:
+        """Parse full syslog text into ParsedRecord list."""
+        if not content or not content.strip():
+            return []
+        return list(self.parse_stream(content.splitlines(True), default_source=default_source))

@@ -4,6 +4,7 @@ import type {
   Investigation,
   EvidenceFile,
   EvidenceUploadSummary,
+  ProcessingJobStatus,
   Event,
   IntegrityVerification,
   DetectionAlert,
@@ -108,6 +109,7 @@ export const evidenceApi = {
       onUploadProgress
     }),
   get: (id: string) => api.get<EvidenceFile>(`/evidence/${id}`),
+  getProcessingJob: (jobId: string) => api.get<ProcessingJobStatus>(`/processing-jobs/${jobId}`),
   verify: (id: string) => api.post<IntegrityVerification>(`/evidence/${id}/verify`),
   getVerifications: (id: string) => api.get<IntegrityVerification[]>(`/evidence/${id}/verifications`),
   download: (id: string) => `${getApiBaseUrl()}/evidence/${id}/download`,

@@ -28,6 +28,7 @@ export interface EvidenceFile {
 
 export interface EvidenceUploadSummary {
   evidence_id: string;
+  job_id?: string;
   filename: string;
   file_size: number;
   sha256: string;
@@ -37,6 +38,28 @@ export interface EvidenceUploadSummary {
   parsed_partial: number;
   parsed_failed: number;
   missing_timestamps: number;
+  reference_year?: number | null;
+  clock_skew_seconds?: number;
+  status?: string;
+}
+
+export interface ProcessingJobStatus {
+  job_id: string;
+  evidence_id: string;
+  investigation_id: string;
+  filename: string;
+  file_size: number;
+  sha256: string;
+  detected_format: string;
+  status: string;
+  total_records: number;
+  parsed_ok: number;
+  parsed_partial: number;
+  parsed_failed: number;
+  missing_timestamps: number;
+  started_at: string;
+  completed_at?: string | null;
+  errors: string[];
 }
 
 export interface Event {

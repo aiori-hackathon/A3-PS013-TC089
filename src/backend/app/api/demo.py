@@ -27,6 +27,18 @@ from app.services.triage.triage_service import TriageService
 router = APIRouter(tags=["Demo Scenarios"])
 
 
+def _load_scenario_metadata(sample_dir: Path) -> dict:
+    """Read optional per-scenario metadata used for timezone and clock-skew handling."""
+    meta_file = sample_dir / "scenario_metadata.json"
+    if not meta_file.is_file():
+        return {}
+    try:
+        with open(meta_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def _get_available_scenarios() -> List[ScenarioInfo]:
     """Retrieve catalog of built-in demo scenarios from disk."""
     sample_dir = Path(settings.SAMPLE_DATA_PATH)
@@ -147,23 +159,44 @@ def load_demo_scenario(payload: LoadScenarioRequest, db: Session = Depends(get_d
     files_ingested = 0
     total_events = 0
 
+    scenario_meta_files = _load_scenario_metadata(sample_dir)
+    file_meta_map = {
+        item.get("filename"): item
+        for item in scenario_meta_files.get("files", [])
+        if item.get("filename")
+    }
+    try:
+        reference_year = int(scenario_meta_files["reference_year"])
+    except (KeyError, TypeError, ValueError):
+        reference_year = None
+
     if sample_dir.is_dir():
-        for file_path in sample_dir.glob("*"):
+        for file_path in sorted(sample_dir.glob("*")):
             if file_path.suffix.lower() in settings.ALLOWED_EXTENSIONS and file_path.name not in {"scenario.json", "scenario_metadata.json"}:
                 try:
                     with open(file_path, "rb") as f:
                         file_bytes = f.read()
 
-                    tz_hint = "+05:30" if "app_events" in file_path.name else None
-                    src_sys = "Firewall-01" if "firewall" in file_path.name else ("WebServer-DMZ" if "web" in file_path.name else "Linux-Host-01")
+                    file_meta = file_meta_map.get(file_path.name, {})
+                    tz_hint = file_meta.get("timezone") or ("+05:30" if "app_events" in file_path.name else None)
+                    try:
+                        clock_skew_seconds = int(file_meta.get("clock_skew_seconds") or 0)
+                    except (TypeError, ValueError):
+                        clock_skew_seconds = 0
+                    src_sys = file_meta.get("source_system") or (
+                        "Firewall-01" if "firewall" in file_path.name else ("WebServer-DMZ" if "web" in file_path.name else "Linux-Host-01")
+                    )
+                    src_cat = file_meta.get("source_category") or "Security Telemetry"
 
                     evidence, job = ingestor.ingest_file(
                         investigation_id=inv_id,
                         file_bytes=file_bytes,
                         original_filename=file_path.name,
                         source_system=src_sys,
-                        source_category="Security Telemetry",
+                        source_category=src_cat,
                         timezone_hint=tz_hint,
+                        reference_year=reference_year,
+                        clock_skew_seconds=clock_skew_seconds,
                         actor="DEMO_LOADER",
                     )
                     files_ingested += 1

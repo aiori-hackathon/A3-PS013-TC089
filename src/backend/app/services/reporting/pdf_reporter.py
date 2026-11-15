@@ -287,7 +287,8 @@ def generate_pdf_report(investigation_id: str, db: Session) -> InvestigationRepo
         "<b>Summary of Findings:</b> Cross-log correlation was executed across the ingested datasets. "
         "Cryptographic hashes verify that original source evidence files remain unmodified. "
         "Timestamps have been strictly validated; logs without explicit timezone headers have been identified "
-        "and flagged to prevent timeline skew contamination.<br/><br/>"
+        "and flagged to prevent timeline skew contamination. Investigator-provided clock skew offsets are applied "
+        "explicitly and recorded as CLOCK_SKEW_ADJUSTED events.<br/><br/>"
         "<b>Limitations & Verification:</b> In accordance with digital forensics standards, parsed events marked "
         "with UNCERTAIN or SYSLOG_NO_YEAR status should be corroborated with external physical or host-level NTP telemetry."
     )

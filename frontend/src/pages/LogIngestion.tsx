@@ -26,6 +26,8 @@ interface QueuedFile {
   sourceSystem: string;
   sourceCategory: string;
   timezoneHint: string;
+  referenceYear: string;
+  clockSkewSeconds: string;
   progress: number;
   status: 'idle' | 'uploading' | 'completed' | 'error';
   result?: EvidenceUploadSummary;
@@ -111,6 +113,8 @@ export const LogIngestion: React.FC = () => {
         sourceSystem: 'ENDPOINT-PRIMARY',
         sourceCategory: defaultCategory,
         timezoneHint: 'UTC',
+        referenceYear: '',
+        clockSkewSeconds: '0',
         progress: 0,
         status: 'idle',
       };
@@ -127,6 +131,46 @@ export const LogIngestion: React.FC = () => {
     setQueuedFiles((prev) =>
       prev.map((item, idx) => (idx === index ? { ...item, ...updates } : item))
     );
+  };
+
+  const waitForProcessingJob = async (
+    jobId: string,
+    index: number,
+    uploaded: EvidenceUploadSummary
+  ) => {
+    const startedAt = Date.now();
+    while (true) {
+      const res = await evidenceApi.getProcessingJob(jobId);
+      const job = res.data;
+      const merged: EvidenceUploadSummary = {
+        ...uploaded,
+        records_processed: job.total_records,
+        parsed_ok: job.parsed_ok,
+        parsed_partial: job.parsed_partial,
+        parsed_failed: job.parsed_failed,
+        missing_timestamps: job.missing_timestamps,
+        status: job.status,
+      };
+
+      if (job.status === 'COMPLETED' || job.status === 'PARTIAL') {
+        updateQueuedFile(index, { status: 'completed', progress: 100, result: merged });
+        toast.success(`Ingested & parsed: ${uploaded.filename}`);
+        return;
+      }
+
+      if (job.status === 'FAILED') {
+        const message = job.errors?.length ? job.errors.join('; ') : 'Background processing failed';
+        updateQueuedFile(index, { status: 'error', progress: 100, result: merged, errorMessage: message });
+        toast.error(`Failed to process ${uploaded.filename}`);
+        return;
+      }
+
+      updateQueuedFile(index, { status: 'uploading', progress: 98, result: merged });
+      if (Date.now() - startedAt > 60 * 60 * 1000) {
+        throw new Error('Processing timed out after 60 minutes');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
   };
 
   const handleUploadAll = async () => {
@@ -177,6 +221,12 @@ export const LogIngestion: React.FC = () => {
       if (item.timezoneHint) {
         formData.append('timezone_hint', item.timezoneHint);
       }
+      if (item.referenceYear.trim()) {
+        formData.append('reference_year', item.referenceYear.trim());
+      }
+      if (item.clockSkewSeconds.trim()) {
+        formData.append('clock_skew_seconds', item.clockSkewSeconds.trim());
+      }
 
       try {
         const res = await evidenceApi.upload(formData, (progressEvent) => {
@@ -187,12 +237,18 @@ export const LogIngestion: React.FC = () => {
         });
 
         const uploaded = Array.isArray(res.data) ? res.data[0] : res.data;
-        updateQueuedFile(i, {
-          status: 'completed',
-          progress: 100,
-          result: uploaded,
-        });
-        toast.success(`Ingested & parsed: ${item.file.name}`);
+        updateQueuedFile(i, { status: 'uploading', progress: 95, result: uploaded });
+
+        if (uploaded.job_id && uploaded.status === 'PROCESSING') {
+          await waitForProcessingJob(uploaded.job_id, i, uploaded);
+        } else {
+          updateQueuedFile(i, {
+            status: 'completed',
+            progress: 100,
+            result: uploaded,
+          });
+          toast.success(`Ingested & parsed: ${item.file.name}`);
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Upload failed';
         updateQueuedFile(i, {
@@ -289,8 +345,8 @@ export const LogIngestion: React.FC = () => {
       {/* Step 2: Drag & Drop Dropzone */}
       <Card>
         <CardHeader
-          title="Step 2: Upload Log Artifacts & PCAPs"
-          subtitle="Supported formats: Syslog, CSV, JSON, Apache/Nginx access logs, Windows EVTX/Security, Suricata/Snort"
+          title="Step 2: Upload Log Artifacts"
+          subtitle="Supported formats: Syslog/auth.log, CSV, JSON/NDJSON, and CSV/JSON exports from web, firewall, or IDS sources"
         />
 
         <div
@@ -393,17 +449,36 @@ export const LogIngestion: React.FC = () => {
 
                 {/* Progress bar */}
                 {item.status === 'uploading' && (
-                  <div className="w-full bg-[#1e293b] rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-sky-500 h-1.5 rounded-full transition-all duration-300"
-                      style={{ width: `${item.progress}%` }}
-                    />
+                  <div className="space-y-1">
+                    <div className="w-full bg-[#1e293b] rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-sky-500 h-1.5 rounded-full transition-all duration-300"
+                        style={{ width: `${item.progress}%` }}
+                      />
+                    </div>
+                    {item.result && (
+                      <p className="text-[11px] font-mono text-slate-500">
+                        Processing {item.result.records_processed.toLocaleString()} records...
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {item.status === 'error' && item.errorMessage && (
+                  <div className="rounded border border-red-900/50 bg-red-950/20 p-2 text-xs font-mono text-red-300 break-words">
+                    {item.errorMessage}
+                  </div>
+                )}
+
+                {item.status === 'idle' && item.file.size > 25 * 1024 * 1024 && (
+                  <div className="rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs font-mono text-amber-300">
+                    Large artifact: the file is streamed to disk and parsed in the background. Processing may take several minutes; this page will poll for progress.
                   </div>
                 )}
 
                 {/* File Metadata Form if not yet completed */}
                 {item.status !== 'completed' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
                     <Input
                       label="Source System / Host"
                       placeholder="e.g. DC-01, AWS-S3-PROD"
@@ -425,6 +500,20 @@ export const LogIngestion: React.FC = () => {
                       disabled={isUploading}
                       onChange={(e) => updateQueuedFile(idx, { timezoneHint: e.target.value })}
                     />
+                    <Input
+                      label="Reference Year"
+                      placeholder="e.g. 2018 for syslog"
+                      value={item.referenceYear}
+                      disabled={isUploading}
+                      onChange={(e) => updateQueuedFile(idx, { referenceYear: e.target.value })}
+                    />
+                    <Input
+                      label="Clock Skew (sec)"
+                      placeholder="-300 if 5 min ahead"
+                      value={item.clockSkewSeconds}
+                      disabled={isUploading}
+                      onChange={(e) => updateQueuedFile(idx, { clockSkewSeconds: e.target.value })}
+                    />
                   </div>
                 ) : (
                   // Completed result summary
@@ -435,6 +524,9 @@ export const LogIngestion: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-3 text-slate-400">
                       <span>Status: {item.result ? 'COMPLETED' : 'PARSED'}</span>
+                      {!!item.result?.clock_skew_seconds && (
+                        <span>Skew: {item.result.clock_skew_seconds}s</span>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"

@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Iterator, TextIO
 
 
 @dataclass
@@ -45,3 +45,7 @@ class BaseParser(ABC):
     def parse(self, content: str, default_source: Optional[str] = None) -> List[ParsedRecord]:
         """Parse text content into a list of standardized ParsedRecord objects."""
         pass
+
+    def parse_stream(self, stream: TextIO, default_source: Optional[str] = None) -> Iterator[ParsedRecord]:
+        """Parse a text stream lazily. Override for bounded-memory ingestion."""
+        yield from self.parse(stream.read(), default_source=default_source)

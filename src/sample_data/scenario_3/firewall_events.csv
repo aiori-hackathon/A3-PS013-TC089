@@ -1,13 +1,13 @@
 timestamp,event_type,src_ip,dst_ip,src_port,dst_port,protocol,action,bytes,severity,message
-2024-10-30T02:14:55Z,INBOUND,203.0.113.47,192.168.1.100,44520,22,TCP,ALLOW,512,INFO,SSH connection attempt
-2024-10-30T02:15:00Z,INBOUND,203.0.113.47,192.168.1.100,44521,22,TCP,ALLOW,512,INFO,SSH connection established
-2024-10-30T02:15:30Z,INBOUND,203.0.113.47,192.168.1.100,44522,22,TCP,ALLOW,512,MEDIUM,Multiple SSH connections from same source
-2024-10-30T02:16:00Z,INBOUND,203.0.113.47,192.168.1.100,44525,22,TCP,MONITOR,512,MEDIUM,High SSH connection rate - possible brute force
-2024-10-30T03:44:55Z,INBOUND,203.0.113.47,192.168.1.100,55000,22,TCP,ALLOW,512,HIGH,SSH brute force pattern resumed after gap
-2024-10-30T03:45:18Z,INBOUND,203.0.113.47,192.168.1.100,55003,22,TCP,ALLOW,1024,HIGH,SSH authenticated session from previously flagged IP
+2024-10-30T02:19:55Z,INBOUND,203.0.113.47,192.168.1.100,44520,22,TCP,ALLOW,512,INFO,SSH connection attempt
+2024-10-30T02:20:00Z,INBOUND,203.0.113.47,192.168.1.100,44521,22,TCP,ALLOW,512,INFO,SSH connection established
+2024-10-30T02:20:30Z,INBOUND,203.0.113.47,192.168.1.100,44522,22,TCP,ALLOW,512,MEDIUM,Multiple SSH connections from same source
+2024-10-30T02:21:00Z,INBOUND,203.0.113.47,192.168.1.100,44525,22,TCP,MONITOR,512,MEDIUM,High SSH connection rate - possible brute force
+2024-10-30T03:49:55Z,INBOUND,203.0.113.47,192.168.1.100,55000,22,TCP,ALLOW,512,HIGH,SSH brute force pattern resumed after gap
+2024-10-30T03:50:18Z,INBOUND,203.0.113.47,192.168.1.100,55003,22,TCP,ALLOW,1024,HIGH,SSH authenticated session from previously flagged IP
 MALFORMED,NOT_VALID_ROW,,,,,,,,this row has wrong column count and should be flagged
-2024-10-30T03:46:00Z,INBOUND,203.0.113.47,192.168.1.100,55010,80,TCP,ALLOW,4096,HIGH,HTTP traffic from attacker IP to web server
-2024-10-30T03:46:30Z,INBOUND,203.0.113.47,192.168.1.100,55020,3306,TCP,BLOCK,0,CRITICAL,Database connection attempt from external IP blocked
-2024-10-30T03:47:30Z,OUTBOUND,192.168.1.100,45.33.32.156,55500,443,TCP,ALLOW,102400,CRITICAL,Large data transfer to external IP after compromise
-2024-10-30T04:00:05Z,INBOUND,10.10.0.5,192.168.1.100,52000,22,TCP,ALLOW,512,INFO,Legitimate SSH from admin subnet
+2024-10-30T03:51:00Z,INBOUND,203.0.113.47,192.168.1.100,55010,80,TCP,ALLOW,4096,HIGH,HTTP traffic from attacker IP to web server
+2024-10-30T03:51:30Z,INBOUND,203.0.113.47,192.168.1.100,55020,3306,TCP,BLOCK,0,CRITICAL,Database connection attempt from external IP blocked
+2024-10-30T03:52:30Z,OUTBOUND,192.168.1.100,45.33.32.156,55500,443,TCP,ALLOW,102400,CRITICAL,Large data transfer to external IP after compromise
+2024-10-30T04:05:05Z,INBOUND,10.10.0.5,192.168.1.100,52000,22,TCP,ALLOW,512,INFO,Legitimate SSH from admin subnet
 ,,,,,,,,,INFO,Clock skew detected - this firewall is approximately 5 minutes ahead of NTP server

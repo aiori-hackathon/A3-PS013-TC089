@@ -1,7 +1,8 @@
 """Forensic JSON log parser supporting arrays, single objects, and NDJSON."""
 
 import json
-from typing import Optional, List, Dict, Any
+from itertools import chain
+from typing import Optional, List, Dict, Any, Iterator, TextIO
 from app.services.parsing.base_parser import BaseParser, ParsedRecord
 from app.services.parsing.csv_parser import (
     TIMESTAMP_COLUMNS,
@@ -45,6 +46,12 @@ class JSONParser(BaseParser):
                 val = str(normalized_row[cand_norm]).strip()
                 if val and val.lower() != "none" and val.lower() != "null":
                     return val
+            # Nested JSON is flattened as parent_child; match the leaf field too.
+            for key, value in normalized_row.items():
+                if key.endswith(f"_{cand_norm}") and value is not None:
+                    val = str(value).strip()
+                    if val and val.lower() != "none" and val.lower() != "null":
+                        return val
         return None
 
     def _parse_single_dict(self, item: Dict[str, Any], raw_record: str, default_source: Optional[str]) -> ParsedRecord:
@@ -85,6 +92,70 @@ class JSONParser(BaseParser):
         )
         record.evaluate_status()
         return record
+
+    def parse_stream(self, stream: TextIO, default_source: Optional[str] = "JSON_IMPORT") -> Iterator[ParsedRecord]:
+        """Parse NDJSON lazily; fall back to full decoding for JSON arrays/objects."""
+        first_char = ""
+        while True:
+            ch = stream.read(1)
+            if not ch:
+                return
+            if not ch.isspace():
+                first_char = ch
+                break
+        stream.seek(0)
+
+        # Arrays and pretty-printed objects require a full decode. NDJSON is the
+        # common large-log shape and is handled one record at a time below.
+        if first_char == "[":
+            yield from self.parse(stream.read(), default_source=default_source)
+            return
+
+        if first_char != "{":
+            yield from self.parse(stream.read(), default_source=default_source)
+            return
+
+        first_line = ""
+        for line in stream:
+            if line.strip():
+                first_line = line.strip()
+                break
+
+        try:
+            first_obj = json.loads(first_line)
+        except Exception:
+            stream.seek(0)
+            yield from self.parse(stream.read(), default_source=default_source)
+            return
+
+        if not isinstance(first_obj, dict):
+            stream.seek(0)
+            yield from self.parse(stream.read(), default_source=default_source)
+            return
+
+        # If another non-empty line exists, treat the artifact as NDJSON.
+        next_line = ""
+        for line in stream:
+            if line.strip():
+                next_line = line.strip()
+                break
+
+        if not next_line:
+            yield self._parse_single_dict(first_obj, first_line, default_source)
+            return
+
+        yield self._parse_single_dict(first_obj, first_line, default_source)
+
+        for line in chain([next_line], stream):
+            line_str = line.strip()
+            if not line_str:
+                continue
+            try:
+                item = json.loads(line_str)
+            except Exception:
+                continue
+            if isinstance(item, dict):
+                yield self._parse_single_dict(item, line_str, default_source)
 
     def parse(self, content: str, default_source: Optional[str] = "JSON_IMPORT") -> List[ParsedRecord]:
         """Parse JSON array, single JSON object, or JSON Lines (NDJSON)."""

@@ -3,13 +3,15 @@
   "name": "Multi-Source Incident Reconstruction",
   "description": "Complex multi-source incident with mixed timezones, clock skew, malformed records, and cross-source correlation requirements.",
   "synthetic": true,
+  "reference_year": 2024,
   "files": [
     {
       "filename": "linux_auth.log",
       "format": "syslog",
       "source_system": "appserver-prod",
       "source_category": "Linux Host",
-      "timezone_note": "No year in syslog timestamps — must be inferred from context",
+      "timezone": "UTC",
+      "timezone_note": "No year in syslog timestamps — inferred from scenario reference year 2024",
       "records_total": 26,
       "records_malformed": 1,
       "clock_skew": false
@@ -30,7 +32,9 @@
       "source_system": "perimeter-fw-02",
       "source_category": "Firewall",
       "timezone": "UTC",
-      "clock_skew_note": "This firewall is approximately 5 minutes ahead of NTP — noted in data",
+      "clock_skew": true,
+      "clock_skew_seconds": -300,
+      "clock_skew_note": "This firewall is approximately 5 minutes ahead of NTP — raw timestamps corrected by -300 seconds during ingestion",
       "records_total": 12,
       "records_malformed": 2
     }
@@ -42,13 +46,13 @@
     "Privilege escalation (sudo to root)",
     "Bulk data export (15420 records) to external service",
     "New user account creation (svc_backup)",
-    "Clock skew warning for firewall source",
+    "Clock skew corrected by -300 seconds for firewall source",
     "Parsing failures in syslog and CSV"
   ],
   "complexity_notes": [
-    "Syslog timestamps lack year — must be estimated or marked SYSLOG_NO_YEAR",
+    "Syslog timestamps lack year — inferred from scenario reference year 2024",
     "App events in IST timezone (+05:30) — must convert to UTC",
-    "Firewall has documented clock skew (~5 minutes)",
+    "Firewall has documented clock skew (~5 minutes) — raw timestamps corrected by -300 seconds",
     "One JSON event has null timestamp — must be flagged MISSING",
     "One syslog line is completely malformed",
     "Two CSV rows are malformed (wrong column count, missing timestamp)"

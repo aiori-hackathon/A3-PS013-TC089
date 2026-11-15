@@ -90,6 +90,7 @@ class IntegrityVerificationResponse(BaseModel):
 
 class EvidenceUploadSummary(BaseModel):
     evidence_id: str
+    job_id: Optional[str] = None
     filename: str
     file_size: int
     sha256: str
@@ -99,6 +100,28 @@ class EvidenceUploadSummary(BaseModel):
     parsed_partial: int
     parsed_failed: int
     missing_timestamps: int
+    reference_year: Optional[int] = None
+    clock_skew_seconds: int = 0
+    status: str = "COMPLETED"
+
+
+class ProcessingJobStatus(BaseModel):
+    job_id: str
+    evidence_id: str
+    investigation_id: str
+    filename: str
+    file_size: int
+    sha256: str
+    detected_format: str
+    status: str
+    total_records: int
+    parsed_ok: int
+    parsed_partial: int
+    parsed_failed: int
+    missing_timestamps: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    errors: List[str] = []
 
 
 # ==========================================

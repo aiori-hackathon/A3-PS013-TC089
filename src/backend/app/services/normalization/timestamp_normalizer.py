@@ -5,7 +5,7 @@ Tracks exact conversion status and audit assumptions for forensic veracity.
 """
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from dateutil import parser as dt_parser
 from dateutil import tz
@@ -18,6 +18,7 @@ CONVERSION_STATUS = {
     "SOURCE_TZ_USED": "No timezone info; used investigator-provided source timezone",
     "UNCERTAIN": "No timezone info and no source timezone provided; timestamp uncertain",
     "SYSLOG_NO_YEAR": "Syslog format lacks year; estimated from context",
+    "CLOCK_SKEW_ADJUSTED": "Timestamp adjusted by investigator-provided clock skew offset",
     "UNIX_TIMESTAMP": "Unix epoch timestamp converted to UTC",
     "INVALID": "Could not parse timestamp",
     "MISSING": "No timestamp found in record",
@@ -244,4 +245,21 @@ def normalize_timestamp(
         "normalized_utc": None,
         "status": "UNCERTAIN",
         "assumptions": "No timezone info present in record and no source timezone provided. Timestamp marked UNCERTAIN; UTC conversion omitted to prevent forensic contamination.",
+    }
+
+
+def apply_clock_skew(ts_norm: Dict[str, Any], clock_skew_seconds: Optional[int]) -> Dict[str, Any]:
+    """Apply an explicit investigator-provided clock skew correction to a normalized timestamp."""
+    if not clock_skew_seconds or ts_norm.get("normalized_utc") is None:
+        return ts_norm
+
+    adjusted = ts_norm["normalized_utc"] + timedelta(seconds=int(clock_skew_seconds))
+    return {
+        **ts_norm,
+        "normalized_utc": adjusted,
+        "status": "CLOCK_SKEW_ADJUSTED",
+        "assumptions": (
+            f"{ts_norm.get('assumptions', '')} Applied explicit clock skew correction of "
+            f"{int(clock_skew_seconds):+d} seconds."
+        ).strip(),
     }
