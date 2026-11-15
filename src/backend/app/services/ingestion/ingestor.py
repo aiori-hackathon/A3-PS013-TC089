@@ -22,9 +22,10 @@ from app.models.models import (
     generate_uuid,
 )
 from app.services.hashing.hasher import calculate_sha256_bytes
-from app.services.parsing.csv_parser import CSVParser
-from app.services.parsing.json_parser import JSONParser
-from app.services.parsing.syslog_parser import SyslogParser, RFC3164_REGEX, RFC5424_REGEX
+from app.services.parsing.apache_parser import APACHE_ACCESS_REGEX, APACHE_ERROR_REGEX
+from app.services.parsing.generic_parser import is_generic_line
+from app.services.parsing.registry import parser_registry
+from app.services.parsing.syslog_parser import RFC3164_REGEX, RFC5424_REGEX
 from app.services.normalization.timestamp_normalizer import apply_clock_skew, normalize_timestamp
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ FORMAT_SAMPLE_BYTES = 64 * 1024
 def detect_file_format(content: str, filename: str = "") -> str:
     """Detect file format primarily via content inspection with extension fallback.
 
-    Returns: 'json', 'csv', 'syslog', or 'unknown'
+    Returns: 'json', 'csv', 'syslog', 'apache', 'generic', or 'unknown'
     """
     if not content or not content.strip():
         ext = Path(filename).suffix.lower()
@@ -67,8 +68,14 @@ def detect_file_format(content: str, filename: str = "") -> str:
         except Exception:
             pass
 
-    # 2. Test for Syslog format (RFC 3164 / RFC 5424 or standard syslog timestamp)
     sample_lines = lines[:10]
+
+    # 2. Test for CEF, LEEF, and logfmt/key-value formats
+    generic_matches = sum(1 for l in sample_lines if is_generic_line(l))
+    if generic_matches >= max(1, len(sample_lines) // 2):
+        return "generic"
+
+    # 3. Test for Syslog format (RFC 3164 / RFC 5424 or standard syslog timestamp)
     syslog_matches = 0
     for l in sample_lines:
         if (
@@ -81,7 +88,16 @@ def detect_file_format(content: str, filename: str = "") -> str:
     if syslog_matches >= max(1, len(sample_lines) // 2):
         return "syslog"
 
-    # 3. Test for CSV format (delimiter presence and column count consistency)
+    # 4. Test for Apache error or access log format
+    apache_matches = 0
+    for l in sample_lines:
+        if APACHE_ERROR_REGEX.match(l) or APACHE_ACCESS_REGEX.match(l):
+            apache_matches += 1
+
+    if apache_matches >= max(1, len(sample_lines) // 2):
+        return "apache"
+
+    # 5. Test for CSV format (delimiter presence and column count consistency)
     first_line = lines[0] if lines else ""
     if any(delimiter in first_line for delimiter in [",", "\t", ";", "|"]):
         header_tokens = re.split(r"[,;\t|]", first_line)
@@ -101,7 +117,7 @@ def detect_file_format(content: str, filename: str = "") -> str:
     elif ext in (".log", ".txt"):
         return "syslog"
 
-    return "unknown"
+    return "generic" if stripped else "unknown"
 
 
 def detect_file_format_bytes(sample: bytes, filename: str = "") -> str:
@@ -129,11 +145,7 @@ class IngestionService:
         return file_ext
 
     def _select_parser(self, detected_format: str):
-        if detected_format == "csv":
-            return CSVParser()
-        if detected_format == "json":
-            return JSONParser()
-        return SyslogParser()
+        return parser_registry.get(detected_format)
 
     def register_stored_file(
         self,

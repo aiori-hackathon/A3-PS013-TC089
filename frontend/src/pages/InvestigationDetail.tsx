@@ -546,7 +546,7 @@ export const InvestigationDetail: React.FC = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Normalized Timestamp (UTC)</TableHead>
+                    <TableHead>Timestamp (UTC / Source)</TableHead>
                     <TableHead>Severity</TableHead>
                     <TableHead>Category / Type</TableHead>
                     <TableHead>Source IP</TableHead>
@@ -560,6 +560,11 @@ export const InvestigationDetail: React.FC = () => {
                     <TableRow key={evt.id}>
                       <TableCell className="font-mono text-xs whitespace-nowrap text-sky-400">
                         {formatDate(evt.normalized_timestamp || evt.original_timestamp)}
+                        {!evt.normalized_timestamp && evt.original_timestamp && (
+                          <span className="ml-1 text-[10px] text-amber-400" title="Original timestamp; no timezone information was available">
+                            SRC
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={evt.severity} size="sm" label={evt.severity} />

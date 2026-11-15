@@ -42,7 +42,8 @@ EVENT_CATEGORIES = {
         "read",
         "write",
         "access",
-        "stat",
+        "stat ",
+        "stat(",
         "chmod",
         "chown",
         "touch",
@@ -52,11 +53,12 @@ EVENT_CATEGORIES = {
         "sudo",
         "su ",
         "privilege",
-        "root",
         "elevated",
-        "admin",
         "setuid",
         "escalation",
+        "user=root",
+        "uid=0",
+        "euid=0",
     ],
     "HTTP_REQUEST": [
         "get ",
@@ -87,6 +89,17 @@ EVENT_CATEGORIES = {
         "account created",
         "account deleted",
         "usermod",
+    ],
+    "SYSTEM_EVENT": [
+        "startup",
+        "shutdown",
+        "service started",
+        "service stopped",
+        "systemd",
+        "kernel",
+        "configured",
+        "resuming normal operations",
+        "initialized",
     ],
 }
 
@@ -149,6 +162,11 @@ def categorize_event(
     for term in EVENT_CATEGORIES["FILE_ACCESS"]:
         if term in combined_text:
             return "FILE_ACCESS"
+
+    # 8. System / service lifecycle
+    for term in EVENT_CATEGORIES["SYSTEM_EVENT"]:
+        if term in combined_text:
+            return "SYSTEM_EVENT"
 
     return "UNCATEGORIZED"
 

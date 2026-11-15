@@ -43,9 +43,11 @@ https://vigilance-cz0a.onrender.com/
 
 The ingestion workflow also supports an explicit **reference year** for syslog sources that omit the year, and an investigator-supplied **clock-skew offset** in seconds. Adjusted timestamps retain their original values and are marked `CLOCK_SKEW_ADJUSTED` so the correction remains auditable rather than silent.
 
+Native parsers cover syslog/auth.log, Apache error/access logs, CSV, and JSON/NDJSON. A generic parser handles ArcSight CEF, IBM QRadar LEEF 1.x/2.0 (including tab, caret, pipe, and hex delimiters), and logfmt/key-value events, with a registry for adding custom format parsers.
+
 ### Large Log Handling
 
-Uploads are streamed to disk in 1 MB chunks and hashed incrementally, so the full artifact is never held in memory. Parsing runs as a background job and the UI polls `/api/processing-jobs/{job_id}` for progress. Syslog, CSV, and NDJSON are parsed line-by-line; JSON arrays still require a full decode. Events are persisted in bounded batches controlled by `INGESTION_BATCH_SIZE` (default `50000`).
+Uploads are streamed to disk in 1 MB chunks and hashed incrementally, so the full artifact is never held in memory. Parsing runs as a background job and the UI polls `/api/processing-jobs/{job_id}` for progress. Syslog, Apache error/access logs, CEF, LEEF, logfmt, CSV, and NDJSON are parsed line-by-line; JSON arrays still require a full decode. Events are persisted in bounded batches controlled by `INGESTION_BATCH_SIZE` (default `50000`).
 
 A 70 MB `SSH.log` with 655,147 syslog lines was tested at roughly **197 MB peak RSS** with this path, versus ~2.5 GB for the previous all-in-memory implementation. A full HTTP upload of the same file completed in **134 seconds** inside a **512 MiB container**, with Docker reporting about **316 MiB** memory use. The original file remains sealed and downloadable for integrity verification after processing.
 
@@ -57,4 +59,4 @@ The 655,147-event case initially made the deployed dashboard slow because `COUNT
 
 On a local copy of the 655k-event database, the optimized API returned `/api/investigations` in **0.31s cold / 0.002s cached**, `/api/dashboard/stats` in **0.21s / 0.002s**, and `/processing-summary` in **0.33s / 0.003s**. A 50-row event page took **0.05s**, a 50-row timeline took **0.05s**, and a full-text search took **0.77s**. Peak process RSS for the benchmark was **93 MB**. The Render free instance has roughly 0.1 CPU, so cold requests will still be slower there; the short TTL cache (10s list, 15s dashboard, 30s processing summary) keeps repeat navigation fast and is invalidated on writes.
 
-Rule analysis was also rewritten to stream only the columns each rule needs instead of loading every ORM event. On the same 655k-event case, analysis dropped from **~2.2 GB peak RSS** to **~66 MB** and completed locally in **~11s**. To keep responses and alert JSON bounded, alerts store at most **200 event IDs** and each rule emits at most **100 alerts** for very large cases.
+Rule analysis was also rewritten to stream only the columns each rule needs instead of loading every ORM event. On the same 655k-event case, analysis dropped from **~2.2 GB peak RSS** to **~66 MB** and completed locally in **~11s**. To keep responses and alert JSON bounded, alerts store at most **200 event IDs**, **200 IP addresses**, and **200 usernames**, and each rule emits at most **100 alerts** for very large cases.

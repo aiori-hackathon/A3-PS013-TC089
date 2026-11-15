@@ -25,12 +25,20 @@ SUSPICIOUS_PATHS = [
     "/shell",
     "/backup",
     "cmd.exe",
+    "root.exe",
     "/bin/sh",
     "/bin/bash",
 ]
 
 MAX_ALERT_EVENT_IDS = 200
 MAX_ALERTS_PER_RULE = 100
+MAX_ALERT_IPS = 200
+MAX_ALERT_USERNAMES = 200
+
+
+def _bounded_sorted(values, limit: int):
+    """Return a deterministic, bounded list for alert payloads."""
+    return sorted(values)[:limit]
 
 
 class RuleEngine:
@@ -76,11 +84,11 @@ class RuleEngine:
                     severity="HIGH" if entry["count"] < 10 else "CRITICAL",
                     explanation=(
                         f"Detected {entry['count']} authentication failures originating from IP address {ip}. "
-                        f"Targeted accounts: {', '.join(users) if users else 'unknown'}."
+                        f"Targeted accounts: {', '.join(users[:20]) if users else 'unknown'}."
                     ),
                     event_ids=json.dumps(entry["event_ids"]),
                     ip_addresses=json.dumps([ip]),
-                    usernames=json.dumps(users),
+                    usernames=json.dumps(_bounded_sorted(users, MAX_ALERT_USERNAMES)),
                     created_at=datetime.utcnow(),
                     alert_type="AUTHENTICATION_ATTACK",
                 )
@@ -136,7 +144,7 @@ class RuleEngine:
                     ),
                     event_ids=json.dumps(event_ids),
                     ip_addresses=json.dumps([row.source_ip]),
-                    usernames=json.dumps(sorted(users)),
+                    usernames=json.dumps(_bounded_sorted(users, MAX_ALERT_USERNAMES)),
                     created_at=datetime.utcnow(),
                     alert_type="ACCOUNT_COMPROMISE",
                 )
@@ -178,11 +186,11 @@ class RuleEngine:
                     severity="HIGH",
                     explanation=(
                         f"Potential user enumeration or password spraying: IP {ip} targeted {len(target_users)} "
-                        f"different accounts: {', '.join(target_users)}."
+                        f"different accounts: {', '.join(target_users[:20])}."
                     ),
                     event_ids=json.dumps(all_event_ids[:50]),
                     ip_addresses=json.dumps([ip]),
-                    usernames=json.dumps(target_users),
+                    usernames=json.dumps(_bounded_sorted(target_users, MAX_ALERT_USERNAMES)),
                     created_at=datetime.utcnow(),
                     alert_type="RECONNAISSANCE_OR_SPRAYING",
                 )
@@ -203,7 +211,10 @@ class RuleEngine:
             Event.username,
             Event.description,
             Event.raw_record,
-        ).where(Event.investigation_id == self.investigation_id)
+        ).where(
+            Event.investigation_id == self.investigation_id,
+            Event.event_category.in_(("HTTP_REQUEST", "FILE_ACCESS")),
+        )
 
         for row in self._stream(stmt, batch_size=2000):
             text = f"{row.description or ''} {row.raw_record or ''}".lower()
@@ -233,7 +244,7 @@ class RuleEngine:
                 ),
                 event_ids=json.dumps(entry["event_ids"]),
                 ip_addresses=json.dumps([ip] if ip != "UNKNOWN_ORIGIN" else []),
-                usernames=json.dumps(sorted(entry["users"])),
+                usernames=json.dumps(_bounded_sorted(entry["users"], MAX_ALERT_USERNAMES)),
                 created_at=datetime.utcnow(),
                 alert_type="RECONNAISSANCE_OR_EXPLOITATION",
             )
@@ -330,8 +341,8 @@ class RuleEngine:
                     "Indicates potential system degradation, payload crash, or injection error."
                 ),
                 event_ids=json.dumps(app_error_ids + suspicious_ids),
-                ip_addresses=json.dumps(sorted(app_ips | suspicious_ips)),
-                usernames=json.dumps(sorted(app_users | suspicious_users)),
+                ip_addresses=json.dumps(_bounded_sorted(app_ips | suspicious_ips, MAX_ALERT_IPS)),
+                usernames=json.dumps(_bounded_sorted(app_users | suspicious_users, MAX_ALERT_USERNAMES)),
                 created_at=datetime.utcnow(),
                 alert_type="SYSTEM_INSTABILITY_OR_ATTACK_IMPACT",
             )
@@ -377,11 +388,11 @@ class RuleEngine:
                 explanation=(
                     f"Identified {off_hour_count} sensitive security actions (logins, privilege escalations) "
                     "conducted during off-hours (between 19:00 and 07:00 UTC). "
-                    f"Involved users: {', '.join(sorted(users)) if users else 'system'}."
+                    f"Involved users: {', '.join(sorted(users)[:20]) if users else 'system'}."
                 ),
                 event_ids=json.dumps(off_hour_ids),
-                ip_addresses=json.dumps(sorted(ips)),
-                usernames=json.dumps(sorted(users)),
+                ip_addresses=json.dumps(_bounded_sorted(ips, MAX_ALERT_IPS)),
+                usernames=json.dumps(_bounded_sorted(users, MAX_ALERT_USERNAMES)),
                 created_at=datetime.utcnow(),
                 alert_type="ANOMALOUS_OFF_HOURS_ACTIVITY",
             )

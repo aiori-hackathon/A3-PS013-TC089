@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models.models import Investigation, EvidenceFile, Event, generate_uuid
-from app.services.analysis.rule_engine import RuleEngine, run_all_rules
+from app.services.analysis.rule_engine import MAX_ALERT_IPS, RuleEngine, run_all_rules
 
 
 def _setup_test_db():
@@ -186,3 +186,33 @@ def test_rule_1_caps_event_ids_for_large_burst():
     assert len(alerts) == 1
     assert len(json.loads(alerts[0].event_ids)) == 200
     assert "250 authentication failures" in alerts[0].explanation
+
+
+def test_rule_6_caps_alert_ip_and_user_payloads():
+    """Verify correlated application-error alerts keep IP/user lists bounded."""
+    db = _setup_test_db()
+    inv_id = generate_uuid()
+    ev_id = generate_uuid()
+
+    inv = Investigation(id=inv_id, name="Large Error Case", status="ACTIVE")
+    evidence = EvidenceFile(
+        id=ev_id, investigation_id=inv_id, original_filename="errors.log",
+        stored_filename="e.log", file_size=100, sha256_hash="dummy"
+    )
+    db.add_all([inv, evidence])
+
+    for i in range(250):
+        db.add(Event(
+            id=generate_uuid(), investigation_id=inv_id, evidence_id=ev_id,
+            normalized_timestamp=datetime(2026, 10, 30, 10, 0, i % 60),
+            event_category="APPLICATION_ERROR", username=f"user{i}",
+            source_ip=f"198.51.100.{i % 250}", raw_record="error",
+            parsing_status="OK"
+        ))
+    db.commit()
+
+    alerts = RuleEngine(db, inv_id).rule_6_application_errors_following_activity()
+
+    assert len(alerts) == 1
+    assert len(json.loads(alerts[0].ip_addresses)) == MAX_ALERT_IPS
+    assert len(json.loads(alerts[0].usernames)) == MAX_ALERT_IPS

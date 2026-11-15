@@ -346,7 +346,7 @@ export const LogIngestion: React.FC = () => {
       <Card>
         <CardHeader
           title="Step 2: Upload Log Artifacts"
-          subtitle="Supported formats: Syslog/auth.log, CSV, JSON/NDJSON, and CSV/JSON exports from web, firewall, or IDS sources"
+          subtitle="Supported formats: Syslog/auth.log, Apache, CEF, LEEF, logfmt/key-value, CSV, and JSON/NDJSON"
         />
 
         <div

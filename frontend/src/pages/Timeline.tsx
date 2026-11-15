@@ -242,6 +242,7 @@ export const Timeline: React.FC = () => {
                   <option value="ACCOUNT_CHANGE">Account Change</option>
                   <option value="APPLICATION_ERROR">Application Error</option>
                   <option value="HTTP_REQUEST">HTTP Request</option>
+                  <option value="SYSTEM_EVENT">System Event</option>
                   <option value="UNCATEGORIZED">Uncategorized</option>
                 </Select>
               </div>
