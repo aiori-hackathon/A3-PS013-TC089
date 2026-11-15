@@ -8,10 +8,12 @@ from app.database import get_db
 from app.services.cache import invalidate_cache
 from app.models.models import Investigation
 from app.schemas.schemas import (
+    HumanTriageEstimateResponse,
     TriageMeasurementCreate,
     TriageMeasurementResponse,
     TriageComparisonResponse,
 )
+from app.services.triage.human_estimator import HumanTriageEstimator
 from app.services.triage.triage_service import TriageService
 
 router = APIRouter(tags=["Triage Benchmarking"])
@@ -68,3 +70,21 @@ def get_triage_comparison(investigation_id: str, db: Session = Depends(get_db)):
     service = TriageService(db)
     comparison = service.calculate_comparison(investigation_id)
     return TriageComparisonResponse(**comparison)
+
+
+@router.get("/investigations/{investigation_id}/triage/estimate", response_model=HumanTriageEstimateResponse)
+def get_human_triage_estimate(investigation_id: str, db: Session = Depends(get_db)):
+    """Estimate the manual human effort required to triage this investigation's logs.
+
+    The estimate is derived from log volume, number of sources, timestamp
+    normalisation difficulty, malformed records and detected findings.
+    """
+    inv = db.query(Investigation).filter(Investigation.id == investigation_id).first()
+    if not inv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Investigation '{investigation_id}' was not found."
+        )
+
+    estimator = HumanTriageEstimator(db)
+    return HumanTriageEstimateResponse(**estimator.estimate(investigation_id))

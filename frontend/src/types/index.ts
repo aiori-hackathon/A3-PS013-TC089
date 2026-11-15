@@ -188,6 +188,26 @@ export interface ReportItem {
   download_url?: string;
 }
 
+export interface TriageEstimateBreakdown {
+  phase: string;
+  seconds: number;
+  detail: string;
+}
+
+export interface HumanTriageEstimate {
+  available: boolean;
+  estimated_seconds: number;
+  estimated_minutes: number;
+  records: number;
+  sources: number;
+  findings: number;
+  complexity: 'LOW' | 'MEDIUM' | 'HIGH';
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  breakdown: TriageEstimateBreakdown[];
+  assumptions: string[];
+  method: string;
+}
+
 export interface TriageComparisonData {
   scenario: string;
   investigation_id: string;
@@ -198,4 +218,7 @@ export interface TriageComparisonData {
   efficiency_gain_percent?: number;
   manual_events_identified?: number;
   vigilance_events_identified?: number;
+  manual_is_estimated?: boolean;
+  vigilance_is_estimated?: boolean;
+  estimation_method?: string;
 }

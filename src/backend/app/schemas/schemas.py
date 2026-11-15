@@ -254,6 +254,26 @@ class TriageMeasurementResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TriageEstimateBreakdown(BaseModel):
+    phase: str
+    seconds: float
+    detail: str
+
+
+class HumanTriageEstimateResponse(BaseModel):
+    available: bool = False
+    estimated_seconds: float = 0.0
+    estimated_minutes: float = 0.0
+    records: int = 0
+    sources: int = 0
+    findings: int = 0
+    complexity: str = "LOW"
+    confidence: str = "LOW"
+    breakdown: List[TriageEstimateBreakdown] = []
+    assumptions: List[str] = []
+    method: str = "Heuristic manual-triage model v1"
+
+
 class TriageComparisonResponse(BaseModel):
     scenario: str
     investigation_id: str
@@ -264,6 +284,9 @@ class TriageComparisonResponse(BaseModel):
     efficiency_gain_percent: Optional[float] = None
     manual_events_identified: Optional[int] = None
     vigilance_events_identified: Optional[int] = None
+    manual_is_estimated: bool = False
+    vigilance_is_estimated: bool = False
+    estimation_method: Optional[str] = None
 
 
 # ==========================================

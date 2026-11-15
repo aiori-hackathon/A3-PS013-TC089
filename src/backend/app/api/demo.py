@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -19,11 +19,9 @@ from app.schemas.schemas import (
     ScenarioInfo,
     LoadScenarioRequest,
     LoadScenarioResponse,
-    TriageMeasurementCreate,
 )
 from app.services.ingestion.ingestor import IngestionService
 from app.services.analysis.rule_engine import run_all_rules
-from app.services.triage.triage_service import TriageService
 
 router = APIRouter(tags=["Demo Scenarios"])
 
@@ -209,39 +207,9 @@ def load_demo_scenario(payload: LoadScenarioRequest, db: Session = Depends(get_d
     # 3. Automatically run Rule Engine
     alerts = run_all_rules(inv_id, db)
 
-    # 4. Record baseline triage benchmarks for comparison demonstration
-    triage_service = TriageService(db)
-    now = datetime.utcnow()
-
-    # Simulated manual investigation: 45 minutes (2700s)
-    manual_start = now - timedelta(minutes=45)
-    triage_service.record_measurement(
-        investigation_id=inv_id,
-        data=TriageMeasurementCreate(
-            method="MANUAL",
-            scenario=scenario_meta.name,
-            start_time=manual_start,
-            end_time=now,
-            events_identified=len(alerts),
-            records_processed=total_events,
-            notes="Manual command-line grep and spreadsheet correlation by analyst.",
-        )
-    )
-
-    # VIGILANCE automated investigation: 4.8 minutes (288s)
-    vig_start = now - timedelta(minutes=5)
-    triage_service.record_measurement(
-        investigation_id=inv_id,
-        data=TriageMeasurementCreate(
-            method="VIGILANCE",
-            scenario=scenario_meta.name,
-            start_time=vig_start,
-            end_time=now,
-            events_identified=len(alerts) + 2,
-            records_processed=total_events,
-            notes="VIGILANCE automated ingestion, multi-log timeline unification, and rule engine execution.",
-        )
-    )
+    # 4. Triage baselines are not hardcoded here. The comparison endpoint derives
+    #    a human-effort estimate from the ingested logs and uses the real,
+    #    measured ingestion duration for the VIGILANCE side.
 
     # Log audit
     audit = AuditLog(

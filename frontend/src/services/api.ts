@@ -11,6 +11,7 @@ import type {
   ProcessingSummary,
   TriageMeasurement,
   TriageComparisonData,
+  HumanTriageEstimate,
   DashboardStats,
   DemoScenario,
   ReportItem
@@ -98,6 +99,8 @@ export const investigationsApi = {
     api.post<TriageMeasurement>(`/investigations/${id}/triage`, data),
   getTriageComparison: (id: string) =>
     api.get<TriageComparisonData>(`/investigations/${id}/triage/comparison`),
+  getTriageEstimate: (id: string) =>
+    api.get<HumanTriageEstimate>(`/investigations/${id}/triage/estimate`),
 };
 
 // Evidence

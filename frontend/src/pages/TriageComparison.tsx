@@ -10,7 +10,13 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { investigationsApi } from '../services/api';
-import type { Investigation, TriageMeasurement, ProcessingSummary } from '../types';
+import type {
+  Investigation,
+  TriageMeasurement,
+  TriageComparisonData,
+  HumanTriageEstimate,
+  ProcessingSummary,
+} from '../types';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -38,6 +44,8 @@ export const TriageComparison: React.FC = () => {
   const [manualMeasurement, setManualMeasurement] = useState<TriageMeasurement | null>(null);
   const [vigilanceMeasurement, setVigilanceMeasurement] = useState<TriageMeasurement | null>(null);
   const [processingSummary, setProcessingSummary] = useState<ProcessingSummary | null>(null);
+  const [comparison, setComparison] = useState<TriageComparisonData | null>(null);
+  const [estimate, setEstimate] = useState<HumanTriageEstimate | null>(null);
 
   useEffect(() => {
     const fetchInvs = async () => {
@@ -60,15 +68,18 @@ export const TriageComparison: React.FC = () => {
       setManualMeasurement(null);
       setVigilanceMeasurement(null);
       setProcessingSummary(null);
+      setComparison(null);
+      setEstimate(null);
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
-      const [triageRes, summaryRes, invRes] = await Promise.allSettled([
+      const [triageRes, summaryRes, comparisonRes, estimateRes] = await Promise.allSettled([
         investigationsApi.getTriage(selectedInvId),
         investigationsApi.getProcessingSummary(selectedInvId),
-        investigationsApi.get(selectedInvId),
+        investigationsApi.getTriageComparison(selectedInvId),
+        investigationsApi.getTriageEstimate(selectedInvId),
       ]);
 
       let manualM: TriageMeasurement | null = null;
@@ -80,32 +91,14 @@ export const TriageComparison: React.FC = () => {
         vigilanceM = [...measurements].reverse().find((m) => m.method === 'VIGILANCE') || null;
       }
 
-      let summary: ProcessingSummary | null = null;
       if (summaryRes.status === 'fulfilled') {
-        summary = summaryRes.value.data;
-        setProcessingSummary(summary);
+        setProcessingSummary(summaryRes.value.data);
       }
 
-      // If no vigilance measurement exists in db yet, formulate one from processingSummary and investigation
-      if (!vigilanceM) {
-        const eventCount =
-          invRes.status === 'fulfilled' ? invRes.value.data.event_count ?? 12 : 12;
-        const totalRecords = summary?.total_records ?? 15000;
-        // Simulated automated parsing duration ~ 1.8 seconds per 10k lines
-        const estDuration = Math.max(1.2, parseFloat((totalRecords / 8000).toFixed(1)));
-
-        vigilanceM = {
-          id: 'vigilance-auto',
-          investigation_id: selectedInvId,
-          method: 'VIGILANCE',
-          scenario: 'Automated Forensic Ingestion & Correlation',
-          start_time: new Date().toISOString(),
-          duration_seconds: estDuration,
-          events_identified: eventCount > 0 ? eventCount : 14,
-          records_processed: totalRecords,
-          notes: 'Automated multithreaded normalization and threat heuristic evaluation.',
-        };
-      }
+      const comparisonData = comparisonRes.status === 'fulfilled' ? comparisonRes.value.data : null;
+      const estimateData = estimateRes.status === 'fulfilled' ? estimateRes.value.data : null;
+      setComparison(comparisonData);
+      setEstimate(estimateData);
 
       setManualMeasurement(manualM);
       setVigilanceMeasurement(vigilanceM);
@@ -116,6 +109,10 @@ export const TriageComparison: React.FC = () => {
         setManualEventsIdentified(manualM.events_identified || 8);
         setManualRecordsCount(manualM.records_processed || 15000);
         setManualNotes(manualM.notes || '');
+      } else if (estimateData?.available) {
+        setManualDurationMinutes(Math.max(1, Math.round(estimateData.estimated_seconds / 60)));
+        setManualEventsIdentified(estimateData.findings || 0);
+        setManualRecordsCount(estimateData.records || 0);
       }
     } catch {
       toast.error('Failed to load triage telemetry');
@@ -157,14 +154,33 @@ export const TriageComparison: React.FC = () => {
 
   const manualSeconds = manualMeasurement
     ? manualMeasurement.duration_seconds ?? manualDurationMinutes * 60
-    : manualDurationMinutes * 60;
+    : comparison?.manual_duration_seconds ??
+      (estimate?.available ? estimate.estimated_seconds : manualDurationMinutes * 60);
 
-  const vigilanceSeconds = vigilanceMeasurement?.duration_seconds ?? 2.4;
-  const timeSavedSeconds = Math.max(0, manualSeconds - vigilanceSeconds);
+  const vigilanceSeconds =
+    vigilanceMeasurement?.duration_seconds ?? comparison?.vigilance_duration_seconds ?? 0;
+
+  const hasVigilance = vigilanceSeconds > 0;
+  const manualIsEstimated =
+    !manualMeasurement &&
+    (comparison?.manual_is_estimated ?? (estimate?.available ?? false));
+
+  const timeSavedSeconds = hasVigilance ? Math.max(0, manualSeconds - vigilanceSeconds) : 0;
   const percentageReduction =
-    manualSeconds > 0
+    hasVigilance && manualSeconds > 0
       ? Math.min(99.9, (((manualSeconds - vigilanceSeconds) / manualSeconds) * 100)).toFixed(1)
-      : '0';
+      : null;
+
+  const manualFindings =
+    manualMeasurement?.events_identified ??
+    comparison?.manual_events_identified ??
+    estimate?.findings ??
+    manualEventsIdentified;
+  const vigilanceFindings =
+    vigilanceMeasurement?.events_identified ??
+    comparison?.vigilance_events_identified ??
+    estimate?.findings ??
+    0;
 
   const chartData = [
     {
@@ -174,8 +190,8 @@ export const TriageComparison: React.FC = () => {
     },
     {
       metric: 'Key Events Identified',
-      Manual: manualMeasurement?.events_identified ?? manualEventsIdentified,
-      Vigilance: vigilanceMeasurement?.events_identified ?? 14,
+      Manual: manualFindings,
+      Vigilance: vigilanceFindings,
     },
   ];
 
@@ -221,10 +237,11 @@ export const TriageComparison: React.FC = () => {
           <div>
             <div className="text-xs font-mono text-slate-400 uppercase">Triage Time Saved</div>
             <div className="text-2xl font-bold font-mono text-sky-400 mt-0.5">
-              {formatDuration(timeSavedSeconds)}
+              {hasVigilance ? formatDuration(timeSavedSeconds) : '—'}
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-              {formatDuration(manualSeconds)} (Manual) → {formatDuration(vigilanceSeconds)} (Vigilance)
+              {formatDuration(manualSeconds)} ({manualIsEstimated ? 'estimated ' : ''}manual) →{' '}
+              {hasVigilance ? `${formatDuration(vigilanceSeconds)} (Vigilance)` : 'awaiting processing'}
             </div>
           </div>
         </Card>
@@ -236,10 +253,10 @@ export const TriageComparison: React.FC = () => {
           <div>
             <div className="text-xs font-mono text-slate-400 uppercase">Investigation Time Reduction</div>
             <div className="text-2xl font-bold font-mono text-emerald-400 mt-0.5">
-              {percentageReduction}%
+              {percentageReduction !== null ? `${percentageReduction}%` : '—'}
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-              Near-instantaneous time-series synthesis
+              Measured against real pipeline runtime
             </div>
           </div>
         </Card>
@@ -251,14 +268,90 @@ export const TriageComparison: React.FC = () => {
           <div>
             <div className="text-xs font-mono text-slate-400 uppercase">Automated Correlation Hits</div>
             <div className="text-2xl font-bold font-mono text-cyan-400 mt-0.5">
-              {vigilanceMeasurement?.events_identified ?? 14}
+              {vigilanceFindings}
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-              Threat heuristics vs {manualMeasurement?.events_identified ?? manualEventsIdentified} manual findings
+              Threat heuristics vs {manualFindings} manual findings
             </div>
           </div>
         </Card>
       </div>
+
+      {/* Human Effort Estimate */}
+      {estimate?.available && (
+        <Card>
+          <CardHeader
+            title="Auto-Estimated Human Triage Baseline"
+            subtitle={`Derived from ${estimate.records.toLocaleString()} records across ${estimate.sources} source(s) — no manual timing required`}
+            action={
+              <Badge
+                variant={estimate.complexity}
+                size="sm"
+                label={`${estimate.complexity} complexity`}
+              />
+            }
+          />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b]">
+              <div className="text-[11px] font-mono text-slate-500 uppercase">Estimated Time</div>
+              <div className="text-lg font-bold font-mono text-sky-400 mt-0.5">
+                {formatDuration(estimate.estimated_seconds)}
+              </div>
+              <div className="text-[11px] font-mono text-slate-500">
+                {estimate.estimated_minutes} min
+              </div>
+            </div>
+            <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b]">
+              <div className="text-[11px] font-mono text-slate-500 uppercase">Records</div>
+              <div className="text-lg font-bold font-mono text-slate-200 mt-0.5">
+                {estimate.records.toLocaleString()}
+              </div>
+              <div className="text-[11px] font-mono text-slate-500">
+                {estimate.sources} source(s)
+              </div>
+            </div>
+            <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b]">
+              <div className="text-[11px] font-mono text-slate-500 uppercase">Findings to Validate</div>
+              <div className="text-lg font-bold font-mono text-slate-200 mt-0.5">
+                {estimate.findings}
+              </div>
+              <div className="text-[11px] font-mono text-slate-500">
+                ~45 s each
+              </div>
+            </div>
+            <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b]">
+              <div className="text-[11px] font-mono text-slate-500 uppercase">Confidence</div>
+              <div className="text-lg font-bold font-mono text-emerald-400 mt-0.5">
+                {estimate.confidence}
+              </div>
+              <div className="text-[11px] font-mono text-slate-500">
+                {estimate.method}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            {estimate.breakdown.map((item) => (
+              <div
+                key={item.phase}
+                className="flex items-start justify-between gap-3 p-2 rounded bg-[#0d1117] border border-[#1e293b] text-xs font-mono"
+              >
+                <div>
+                  <div className="text-slate-300">{item.phase}</div>
+                  <div className="text-[11px] text-slate-500 font-sans">{item.detail}</div>
+                </div>
+                <div className="text-sky-400 font-bold shrink-0">
+                  {formatDuration(item.seconds)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-slate-500 font-mono mt-3">
+            {estimate.assumptions.join(' ')}
+          </p>
+        </Card>
+      )}
 
       {/* Side-by-Side Comparison Panels */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -267,7 +360,13 @@ export const TriageComparison: React.FC = () => {
           <CardHeader
             title="Manual Investigation Workflow"
             subtitle="Record time spent conducting manual grep, spreadsheet pivot, and ad-hoc parsing"
-            action={<Badge variant="MANUAL" size="sm" label="User Baseline" />}
+            action={
+              manualIsEstimated ? (
+                <Badge variant="MEDIUM" size="sm" label="Auto-Estimated" />
+              ) : (
+                <Badge variant="MANUAL" size="sm" label="User Baseline" />
+              )
+            }
           />
 
           <form onSubmit={handleSaveManual} className="space-y-3">
@@ -351,21 +450,21 @@ export const TriageComparison: React.FC = () => {
             <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b] flex items-center justify-between">
               <span className="text-slate-400">Processing & Ingestion Duration</span>
               <span className="text-sky-400 font-bold text-sm">
-                {formatDuration(vigilanceMeasurement?.duration_seconds)}
+                {hasVigilance ? formatDuration(vigilanceSeconds) : 'Awaiting processing'}
               </span>
             </div>
 
             <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b] flex items-center justify-between">
               <span className="text-slate-400">Total Log Records Processed</span>
               <span className="text-slate-200 font-bold text-sm">
-                {(processingSummary?.total_records ?? vigilanceMeasurement?.records_processed ?? 15000).toLocaleString()}
+                {(processingSummary?.total_records ?? vigilanceMeasurement?.records_processed ?? estimate?.records ?? 0).toLocaleString()}
               </span>
             </div>
 
             <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b] flex items-center justify-between">
               <span className="text-slate-400">High-Fidelity Threat Events Correlated</span>
               <span className="text-emerald-400 font-bold text-sm">
-                {vigilanceMeasurement?.events_identified ?? 14}
+                {vigilanceFindings}
               </span>
             </div>
 
@@ -375,7 +474,7 @@ export const TriageComparison: React.FC = () => {
               </span>
               <p className="text-slate-300 font-sans leading-relaxed text-xs">
                 {vigilanceMeasurement?.notes ||
-                  'Automated parsing, timezone normalization, SHA-256 seal, and heuristic rule evaluation executed instantly on ingestion.'}
+                  'Duration is the real measured runtime of this investigation’s ingestion and parsing jobs.'}
               </p>
             </div>
 
@@ -400,7 +499,7 @@ export const TriageComparison: React.FC = () => {
       <div className="p-3 rounded bg-[#111827] border border-[#1e293b] text-xs font-mono text-slate-500 flex items-start gap-2">
         <AlertCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
         <span>
-          <strong className="text-slate-400 uppercase">Scientific Rigor Notice:</strong> Manual baseline measurements are user-provided benchmarks for comparative workflow audits and are not verified by Vigilance.
+          <strong className="text-slate-400 uppercase">Scientific Rigor Notice:</strong> When no manual timing is saved, the human baseline is an auto-estimate derived from log volume, source count, timestamp-normalisation difficulty and findings. The VIGILANCE duration is the measured runtime of real ingestion and parsing jobs, not a simulated value.
         </span>
       </div>
     </div>
