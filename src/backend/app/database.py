@@ -47,7 +47,21 @@ def get_db():
         db.close()
 
 
+def _ensure_indexes():
+    """Create model indexes that may be missing from an older existing database."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    for table in Base.metadata.tables.values():
+        for index in table.indexes:
+            try:
+                index.create(bind=engine, checkfirst=True)
+            except Exception as exc:
+                logger.warning("Could not create index %s: %s", index.name, exc)
+
+
 def init_db():
-    """Initialize database tables."""
+    """Initialize database tables and apply additive index upgrades."""
     import app.models.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _ensure_indexes()

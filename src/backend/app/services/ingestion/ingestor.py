@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.services.cache import invalidate_cache
 from app.models.models import (
     AuditLog,
     Event,
@@ -337,6 +338,7 @@ class IngestionService:
                 flush_batch()
 
         flush_batch()
+        invalidate_cache()
 
         job.completed_at = datetime.utcnow()
         if errors and parsed_ok_cnt == 0:
@@ -362,6 +364,7 @@ class IngestionService:
         job.errors_json = json.dumps(errors)
         evidence.processing_status = "FAILED"
         self.db.commit()
+        invalidate_cache()
         return evidence, job
 
     def ingest_file(

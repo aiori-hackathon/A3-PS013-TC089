@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.cache import invalidate_cache
 from app.models.models import Investigation
 from app.schemas.schemas import (
     TriageMeasurementCreate,
@@ -36,6 +37,7 @@ def record_triage_measurement(
 
     service = TriageService(db)
     record = service.record_measurement(investigation_id, payload)
+    invalidate_cache()
     return record
 
 

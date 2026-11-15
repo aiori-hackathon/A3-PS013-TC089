@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.services.cache import invalidate_cache
 from app.models.models import (
     Investigation,
     EvidenceFile,
@@ -147,6 +148,7 @@ async def upload_evidence(
             clock_skew_seconds,
         )
 
+        invalidate_cache()
         summaries.append(
             EvidenceUploadSummary(
                 evidence_id=evidence.id,
@@ -305,6 +307,7 @@ def verify_evidence_integrity(evidence_id: str, db: Session = Depends(get_db)):
         )
         db.add(verification)
         db.commit()
+        invalidate_cache()
         return EvidenceVerifyResponse(
             id=verification.id,
             verification_id=verification.id,
@@ -347,6 +350,7 @@ def verify_evidence_integrity(evidence_id: str, db: Session = Depends(get_db)):
     )
     db.add(audit)
     db.commit()
+    invalidate_cache()
 
     return EvidenceVerifyResponse(
         id=verification.id,

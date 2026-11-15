@@ -50,3 +50,11 @@ Uploads are streamed to disk in 1 MB chunks and hashed incrementally, so the ful
 A 70 MB `SSH.log` with 655,147 syslog lines was tested at roughly **197 MB peak RSS** with this path, versus ~2.5 GB for the previous all-in-memory implementation. A full HTTP upload of the same file completed in **134 seconds** inside a **512 MiB container**, with Docker reporting about **316 MiB** memory use. The original file remains sealed and downloadable for integrity verification after processing.
 
 Storage is the main deployment constraint: this test produced a **~715 MB SQLite database**, a transient **~117 MB WAL file**, and **~71 MB** of sealed evidence. Ensure the host has enough disk for the expected evidence volume, or reduce `INGESTION_BATCH_SIZE`/retention for smaller environments.
+
+### Large Case Performance
+
+The 655,147-event case initially made the deployed dashboard slow because `COUNT(Event.id)` forced SQLite row lookups and the dashboard loaded every processing job. Counts now use `COUNT(*)`, investigation counts are batched, processing metrics use SQL `GROUP BY`, and composite indexes cover parsing status, timestamp status, severity, and event category. Missing indexes are created automatically at startup for existing databases.
+
+On a local copy of the 655k-event database, the optimized API returned `/api/investigations` in **0.31s cold / 0.002s cached**, `/api/dashboard/stats` in **0.21s / 0.002s**, and `/processing-summary` in **0.33s / 0.003s**. A 50-row event page took **0.05s**, a 50-row timeline took **0.05s**, and a full-text search took **0.77s**. Peak process RSS for the benchmark was **93 MB**. The Render free instance has roughly 0.1 CPU, so cold requests will still be slower there; the short TTL cache (10s list, 15s dashboard, 30s processing summary) keeps repeat navigation fast and is invalidated on writes.
+
+Rule analysis was also rewritten to stream only the columns each rule needs instead of loading every ORM event. On the same 655k-event case, analysis dropped from **~2.2 GB peak RSS** to **~66 MB** and completed locally in **~11s**. To keep responses and alert JSON bounded, alerts store at most **200 event IDs** and each rule emits at most **100 alerts** for very large cases.

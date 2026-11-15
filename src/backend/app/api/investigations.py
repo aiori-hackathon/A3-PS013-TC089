@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.database import get_db
+from app.services.cache import get_cached, invalidate_cache, set_cached
 from app.models.models import (
     Investigation,
     EvidenceFile,
@@ -35,25 +36,47 @@ from app.schemas.schemas import (
 router = APIRouter(tags=["Investigations"])
 
 
-def _build_investigation_response(inv: Investigation, db: Session) -> InvestigationResponse:
-    """Helper to attach count aggregations to investigation response."""
-    ev_count = db.query(func.count(EvidenceFile.id)).filter(EvidenceFile.investigation_id == inv.id).scalar() or 0
-    event_count = db.query(func.count(Event.id)).filter(Event.investigation_id == inv.id).scalar() or 0
-    alert_count = db.query(func.count(DetectionAlert.id)).filter(DetectionAlert.investigation_id == inv.id).scalar() or 0
-
-    return InvestigationResponse(
-        id=inv.id,
-        name=inv.name,
-        description=inv.description,
-        category=inv.category,
-        status=inv.status,
-        created_at=inv.created_at,
-        updated_at=inv.updated_at,
-        archived_at=inv.archived_at,
-        evidence_count=ev_count,
-        event_count=event_count,
-        alert_count=alert_count,
+def _counts_by_investigation(db: Session, model, investigation_ids: List[str]) -> dict:
+    """Return aggregate row counts for many investigations in one query."""
+    if not investigation_ids:
+        return {}
+    rows = (
+        db.query(model.investigation_id, func.count())
+        .filter(model.investigation_id.in_(investigation_ids))
+        .group_by(model.investigation_id)
+        .all()
     )
+    return {investigation_id: count for investigation_id, count in rows}
+
+
+def _build_investigation_responses(invs: List[Investigation], db: Session) -> List[InvestigationResponse]:
+    """Attach evidence/event/alert counts without N+1 queries."""
+    investigation_ids = [inv.id for inv in invs]
+    evidence_counts = _counts_by_investigation(db, EvidenceFile, investigation_ids)
+    event_counts = _counts_by_investigation(db, Event, investigation_ids)
+    alert_counts = _counts_by_investigation(db, DetectionAlert, investigation_ids)
+
+    return [
+        InvestigationResponse(
+            id=inv.id,
+            name=inv.name,
+            description=inv.description,
+            category=inv.category,
+            status=inv.status,
+            created_at=inv.created_at,
+            updated_at=inv.updated_at,
+            archived_at=inv.archived_at,
+            evidence_count=evidence_counts.get(inv.id, 0),
+            event_count=event_counts.get(inv.id, 0),
+            alert_count=alert_counts.get(inv.id, 0),
+        )
+        for inv in invs
+    ]
+
+
+def _build_investigation_response(inv: Investigation, db: Session) -> InvestigationResponse:
+    """Helper to attach count aggregations to a single investigation response."""
+    return _build_investigation_responses([inv], db)[0]
 
 
 @router.post("/investigations", response_model=InvestigationResponse, status_code=status.HTTP_201_CREATED)
@@ -82,6 +105,7 @@ def create_investigation(payload: InvestigationCreate, db: Session = Depends(get
     db.add(audit)
     db.commit()
     db.refresh(inv)
+    invalidate_cache()
 
     return _build_investigation_response(inv, db)
 
@@ -89,8 +113,14 @@ def create_investigation(payload: InvestigationCreate, db: Session = Depends(get
 @router.get("/investigations", response_model=List[InvestigationResponse])
 def list_investigations(db: Session = Depends(get_db)):
     """List all investigations with live counts of evidence, events, and alerts."""
+    cached = get_cached("investigations:list")
+    if cached is not None:
+        return cached
+
     invs = db.query(Investigation).order_by(Investigation.created_at.desc()).all()
-    return [_build_investigation_response(inv, db) for inv in invs]
+    result = _build_investigation_responses(invs, db)
+    set_cached("investigations:list", result, 10)
+    return result
 
 
 @router.get("/investigations/{investigation_id}", response_model=InvestigationDetailResponse)
@@ -143,6 +173,7 @@ def update_investigation(investigation_id: str, payload: InvestigationUpdate, db
     db.add(audit)
     db.commit()
     db.refresh(inv)
+    invalidate_cache()
 
     return _build_investigation_response(inv, db)
 
@@ -159,6 +190,7 @@ def delete_investigation(investigation_id: str, db: Session = Depends(get_db)):
 
     db.delete(inv)
     db.commit()
+    invalidate_cache()
     return {"message": f"Investigation '{investigation_id}' and all associated artifacts deleted successfully."}
 
 
@@ -186,6 +218,7 @@ def archive_investigation(investigation_id: str, db: Session = Depends(get_db)):
     db.add(audit)
     db.commit()
     db.refresh(inv)
+    invalidate_cache()
 
     return _build_investigation_response(inv, db)
 
@@ -193,30 +226,40 @@ def archive_investigation(investigation_id: str, db: Session = Depends(get_db)):
 @router.get("/dashboard/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):
     """Aggregate platform-wide telemetry and activity statistics."""
+    cached = get_cached("dashboard:stats")
+    if cached is not None:
+        return cached
     from datetime import timedelta
     from sqlalchemy import case
 
-    total_invs = db.query(func.count(Investigation.id)).scalar() or 0
-    active_invs = db.query(func.count(Investigation.id)).filter(Investigation.status == "ACTIVE").scalar() or 0
-    total_evidence = db.query(func.count(EvidenceFile.id)).scalar() or 0
-    total_events = db.query(func.count(Event.id)).scalar() or 0
-    total_alerts = db.query(func.count(DetectionAlert.id)).scalar() or 0
-    critical_alerts = db.query(func.count(DetectionAlert.id)).filter(DetectionAlert.severity == "CRITICAL").scalar() or 0
+    total_invs = db.query(func.count()).select_from(Investigation).scalar() or 0
+    active_invs = (
+        db.query(func.count()).select_from(Investigation)
+        .filter(Investigation.status == "ACTIVE").scalar() or 0
+    )
+    total_evidence = db.query(func.count()).select_from(EvidenceFile).scalar() or 0
+    total_events = db.query(func.count()).select_from(Event).scalar() or 0
+    total_alerts = db.query(func.count()).select_from(DetectionAlert).scalar() or 0
+    critical_alerts = (
+        db.query(func.count()).select_from(DetectionAlert)
+        .filter(DetectionAlert.severity == "CRITICAL").scalar() or 0
+    )
 
     # Parsing stats from ProcessingJob table
-    jobs = db.query(ProcessingJob).all()
-    parsed_ok = sum(j.parsed_ok or 0 for j in jobs)
-    parsed_failed = sum(j.parsed_failed or 0 for j in jobs)
+    parsed_ok = db.query(func.coalesce(func.sum(ProcessingJob.parsed_ok), 0)).scalar() or 0
+    parsed_failed = db.query(func.coalesce(func.sum(ProcessingJob.parsed_failed), 0)).scalar() or 0
 
     # Integrity verifications
-    integrity_verified = db.query(func.count(IntegrityVerification.id)).filter(
-        IntegrityVerification.result == "MATCH"
-    ).scalar() or 0
+    integrity_verified = (
+        db.query(func.count()).select_from(IntegrityVerification)
+        .filter(IntegrityVerification.result == "MATCH").scalar() or 0
+    )
 
     # Suspicious events = events with severity HIGH or CRITICAL
-    suspicious_events = db.query(func.count(Event.id)).filter(
-        Event.severity.in_(["HIGH", "CRITICAL"])
-    ).scalar() or 0
+    suspicious_events = (
+        db.query(func.count()).select_from(Event)
+        .filter(Event.severity.in_(["HIGH", "CRITICAL"])).scalar() or 0
+    )
 
     # Calculate average triage time saved across all triage comparisons
     triages = db.query(TriageMeasurement).all()
@@ -286,11 +329,17 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         )
 
     # Events by severity (for chart)
-    severity_rows = db.query(Event.severity, func.count(Event.id)).group_by(Event.severity).all()
+    severity_rows = (
+        db.query(Event.severity, func.count()).select_from(Event)
+        .group_by(Event.severity).all()
+    )
     events_by_severity = [SeverityCount(severity=row[0] or "UNKNOWN", count=row[1]) for row in severity_rows]
 
     # Events by category (for chart)
-    category_rows = db.query(Event.event_category, func.count(Event.id)).group_by(Event.event_category).all()
+    category_rows = (
+        db.query(Event.event_category, func.count()).select_from(Event)
+        .group_by(Event.event_category).all()
+    )
     events_by_category = [CategoryCount(category=row[0] or "UNKNOWN", count=row[1]) for row in category_rows]
 
     # Events over time: last 7 days
@@ -298,7 +347,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     time_rows = (
         db.query(
             func.date(Event.normalized_timestamp).label("dt"),
-            func.count(Event.id).label("cnt")
+            func.count().label("cnt")
         )
         .filter(Event.normalized_timestamp >= cutoff)
         .group_by(func.date(Event.normalized_timestamp))
@@ -307,7 +356,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     )
     events_over_time = [TimeSeriesPoint(date=str(row[0]), count=row[1]) for row in time_rows]
 
-    return DashboardStatsResponse(
+    result = DashboardStatsResponse(
         total_investigations=total_invs,
         active_investigations=active_invs,
         total_evidence_files=total_evidence,
@@ -319,10 +368,12 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         parsed_failed=parsed_failed,
         integrity_verified=integrity_verified,
         suspicious_events=suspicious_events,
-        recent_investigations=[_build_investigation_response(inv, db) for inv in recent_invs],
+        recent_investigations=_build_investigation_responses(recent_invs, db),
         recent_alerts=recent_alerts,
         recent_evidence=recent_evidence,
         events_by_severity=events_by_severity,
         events_by_category=events_by_category,
         events_over_time=events_over_time,
     )
+    set_cached("dashboard:stats", result, 15)
+    return result

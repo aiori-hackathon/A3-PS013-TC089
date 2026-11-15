@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc, asc
+from sqlalchemy import func, or_, desc, asc
 
 from app.models.models import Event
 
@@ -34,12 +34,12 @@ class TimelineBuilder:
 
         Returns: (events, total_count, total_pages)
         """
-        query = self.db.query(Event).filter(Event.investigation_id == investigation_id)
+        filters = [Event.investigation_id == investigation_id]
 
         # Filters
         if search:
             search_pattern = f"%{search.strip()}%"
-            query = query.filter(
+            filters.append(
                 or_(
                     Event.description.ilike(search_pattern),
                     Event.raw_record.ilike(search_pattern),
@@ -51,25 +51,37 @@ class TimelineBuilder:
             )
 
         if source_ip:
-            query = query.filter(Event.source_ip == source_ip.strip())
+            filters.append(Event.source_ip == source_ip.strip())
 
         if username:
-            query = query.filter(Event.username == username.strip())
+            filters.append(Event.username == username.strip())
 
         if category:
-            query = query.filter(Event.event_category == category.strip())
+            filters.append(Event.event_category == category.strip())
 
         if severity:
-            query = query.filter(Event.severity == severity.strip().upper())
+            filters.append(Event.severity == severity.strip().upper())
 
         if source_system:
-            query = query.filter(Event.source_system == source_system.strip())
+            filters.append(Event.source_system == source_system.strip())
 
         if start_date:
-            query = query.filter(Event.normalized_timestamp >= start_date)
+            filters.append(Event.normalized_timestamp >= start_date)
 
         if end_date:
-            query = query.filter(Event.normalized_timestamp <= end_date)
+            filters.append(Event.normalized_timestamp <= end_date)
+
+        # COUNT(*) can use covering indexes; COUNT(id) forces row lookups on SQLite.
+        total_count = (
+            self.db.query(func.count())
+            .select_from(Event)
+            .filter(*filters)
+            .scalar()
+            or 0
+        )
+        total_pages = max(1, (total_count + page_size - 1) // page_size) if total_count > 0 else 1
+
+        query = self.db.query(Event).filter(*filters)
 
         # Sorting: primary normalized_timestamp, secondary original_timestamp
         if sort_asc:
@@ -83,49 +95,58 @@ class TimelineBuilder:
                 Event.id.desc()
             )
 
-        total_count = query.count()
-        total_pages = max(1, (total_count + page_size - 1) // page_size) if total_count > 0 else 1
-
         offset = max(0, (page - 1) * page_size)
         events = query.offset(offset).limit(page_size).all()
 
         return events, total_count, total_pages
 
     def get_processing_summary(self, investigation_id: str) -> Dict[str, Any]:
-        """Aggregate forensic parsing, timestamp, and severity metrics for an investigation."""
-        events = self.db.query(Event).filter(Event.investigation_id == investigation_id).all()
+        """Aggregate forensic parsing metrics with SQL GROUP BY, never loading full events."""
+        from app.models.models import EvidenceFile
+
+        base_filter = Event.investigation_id == investigation_id
+
+        def grouped(column):
+            rows = (
+                self.db.query(column, func.count())
+                .select_from(Event)
+                .filter(base_filter)
+                .group_by(column)
+                .all()
+            )
+            return {key or "UNKNOWN": count for key, count in rows}
+
+        total_events = (
+            self.db.query(func.count())
+            .select_from(Event)
+            .filter(base_filter)
+            .scalar()
+            or 0
+        )
+        evidence_count = (
+            self.db.query(func.count())
+            .select_from(EvidenceFile)
+            .filter(EvidenceFile.investigation_id == investigation_id)
+            .scalar()
+            or 0
+        )
 
         status_counts = {"OK": 0, "PARTIAL": 0, "FAILED": 0}
-        ts_counts: Dict[str, int] = {}
-        sev_counts: Dict[str, int] = {}
-        cat_counts: Dict[str, int] = {}
-
-        for ev in events:
-            # Parsing status
-            status_counts[ev.parsing_status] = status_counts.get(ev.parsing_status, 0) + 1
-
-            # Timestamp status
-            ts_counts[ev.timestamp_status] = ts_counts.get(ev.timestamp_status, 0) + 1
-
-            # Severity
-            sev_counts[ev.severity] = sev_counts.get(ev.severity, 0) + 1
-
-            # Category
-            cat_counts[ev.event_category] = cat_counts.get(ev.event_category, 0) + 1
-
-        from app.models.models import EvidenceFile
-        evidence_count = self.db.query(EvidenceFile).filter(EvidenceFile.investigation_id == investigation_id).count()
+        status_counts.update(grouped(Event.parsing_status))
+        ts_counts = grouped(Event.timestamp_status)
+        sev_counts = grouped(Event.severity)
+        cat_counts = grouped(Event.event_category)
 
         return {
             "investigation_id": investigation_id,
             "total_evidence_files": evidence_count,
-            "total_events": len(events),
+            "total_events": total_events,
             "status_counts": status_counts,
             "timestamp_status_counts": ts_counts,
             "severity_counts": sev_counts,
             "category_counts": cat_counts,
             "total_files": evidence_count,
-            "total_records": len(events),
+            "total_records": total_events,
             "parsed_ok": status_counts.get("OK", 0),
             "parsed_partial": status_counts.get("PARTIAL", 0),
             "parsed_failed": status_counts.get("FAILED", 0),

@@ -96,6 +96,10 @@ class Event(Base):
         Index("idx_events_investigation_normalized_ts", "investigation_id", "normalized_timestamp"),
         Index("idx_events_investigation_source_ip", "investigation_id", "source_ip"),
         Index("idx_events_investigation_username", "investigation_id", "username"),
+        Index("idx_events_investigation_parsing_status", "investigation_id", "parsing_status"),
+        Index("idx_events_investigation_timestamp_status", "investigation_id", "timestamp_status"),
+        Index("idx_events_investigation_severity", "investigation_id", "severity"),
+        Index("idx_events_investigation_event_category", "investigation_id", "event_category"),
     )
 
 

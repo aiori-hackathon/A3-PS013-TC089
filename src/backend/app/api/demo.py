@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.services.cache import invalidate_cache
 from app.models.models import (
     Investigation,
     AuditLog,
@@ -257,6 +258,7 @@ def load_demo_scenario(payload: LoadScenarioRequest, db: Session = Depends(get_d
     )
     db.add(audit)
     db.commit()
+    invalidate_cache()
 
     return LoadScenarioResponse(
         investigation_id=inv_id,

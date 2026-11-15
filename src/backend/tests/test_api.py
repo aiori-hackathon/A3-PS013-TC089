@@ -136,3 +136,28 @@ def test_triage_comparison_flow():
     assert comp["time_saved_seconds"] == 1620.0
     assert comp["speedup_factor"] == 10.0
     assert comp["efficiency_gain_percent"] == 90.0
+
+
+def test_investigation_list_cache_invalidated_on_writes():
+    """Verify cached case lists do not hide newly created or deleted investigations."""
+    from app.services.cache import invalidate_cache
+
+    invalidate_cache()
+    created = client.post("/api/investigations", json={"name": "Cache Invalidation Case"})
+    assert created.status_code == 201
+    inv_id = created.json()["id"]
+
+    first_list = client.get("/api/investigations")
+    assert first_list.status_code == 200
+    assert any(i["id"] == inv_id for i in first_list.json())
+
+    second_list = client.get("/api/investigations")
+    assert second_list.status_code == 200
+    assert any(i["id"] == inv_id for i in second_list.json())
+
+    deleted = client.delete(f"/api/investigations/{inv_id}")
+    assert deleted.status_code == 200
+
+    final_list = client.get("/api/investigations")
+    assert final_list.status_code == 200
+    assert all(i["id"] != inv_id for i in final_list.json())

@@ -3,7 +3,9 @@
 import json
 from collections import defaultdict
 from datetime import datetime
-from typing import List, Dict, Set
+from typing import Dict, List, Set
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.models import Event, DetectionAlert, generate_uuid
@@ -27,6 +29,9 @@ SUSPICIOUS_PATHS = [
     "/bin/bash",
 ]
 
+MAX_ALERT_EVENT_IDS = 200
+MAX_ALERTS_PER_RULE = 100
+
 
 class RuleEngine:
     """Evaluates cyber forensic correlation rules across unified investigation events."""
@@ -34,35 +39,46 @@ class RuleEngine:
     def __init__(self, db: Session, investigation_id: str):
         self.db = db
         self.investigation_id = investigation_id
-        self.events: List[Event] = (
-            self.db.query(Event)
-            .filter(Event.investigation_id == investigation_id)
-            .order_by(Event.normalized_timestamp.asc().nulls_last(), Event.id.asc())
-            .all()
-        )
+
+    def _stream(self, stmt, batch_size: int = 5000):
+        return self.db.execute(stmt).yield_per(batch_size)
 
     def rule_1_multiple_failed_logins(self) -> List[DetectionAlert]:
         """Rule 1: Multiple failed logins from same IP (threshold >= 3)."""
         alerts: List[DetectionAlert] = []
-        failures_by_ip: Dict[str, List[Event]] = defaultdict(list)
+        failures_by_ip: Dict[str, dict] = defaultdict(
+            lambda: {"count": 0, "users": set(), "event_ids": []}
+        )
 
-        for ev in self.events:
-            if ev.event_category == "LOGIN_FAILURE" and ev.source_ip:
-                failures_by_ip[ev.source_ip].append(ev)
+        stmt = (
+            select(Event.source_ip, Event.username, Event.id)
+            .where(
+                Event.investigation_id == self.investigation_id,
+                Event.event_category == "LOGIN_FAILURE",
+                Event.source_ip.isnot(None),
+            )
+        )
+        for row in self._stream(stmt):
+            entry = failures_by_ip[row.source_ip]
+            entry["count"] += 1
+            if row.username:
+                entry["users"].add(row.username)
+            if len(entry["event_ids"]) < MAX_ALERT_EVENT_IDS:
+                entry["event_ids"].append(row.id)
 
-        for ip, fail_events in failures_by_ip.items():
-            if len(fail_events) >= 3:
-                users = list({e.username for e in fail_events if e.username})
+        for ip, entry in failures_by_ip.items():
+            if entry["count"] >= 3 and len(alerts) < MAX_ALERTS_PER_RULE:
+                users = sorted(entry["users"])
                 alert = DetectionAlert(
                     id=generate_uuid(),
                     investigation_id=self.investigation_id,
                     rule_name="Multiple Failed Logins from Same IP",
-                    severity="HIGH" if len(fail_events) < 10 else "CRITICAL",
+                    severity="HIGH" if entry["count"] < 10 else "CRITICAL",
                     explanation=(
-                        f"Detected {len(fail_events)} authentication failures originating from IP address {ip}. "
+                        f"Detected {entry['count']} authentication failures originating from IP address {ip}. "
                         f"Targeted accounts: {', '.join(users) if users else 'unknown'}."
                     ),
-                    event_ids=json.dumps([e.id for e in fail_events]),
+                    event_ids=json.dumps(entry["event_ids"]),
                     ip_addresses=json.dumps([ip]),
                     usernames=json.dumps(users),
                     created_at=datetime.utcnow(),
@@ -75,54 +91,86 @@ class RuleEngine:
     def rule_2_successful_login_after_failures(self) -> List[DetectionAlert]:
         """Rule 2: Successful login after repeated failures from same IP."""
         alerts: List[DetectionAlert] = []
-        events_by_ip: Dict[str, List[Event]] = defaultdict(list)
+        state_by_ip: Dict[str, dict] = defaultdict(
+            lambda: {"fail_count": 0, "fail_users": set(), "fail_ids": []}
+        )
 
-        for ev in self.events:
-            if ev.source_ip and ev.event_category in ("LOGIN_FAILURE", "LOGIN_SUCCESS"):
-                events_by_ip[ev.source_ip].append(ev)
-
-        for ip, ip_events in events_by_ip.items():
-            fail_streak: List[Event] = []
-            for ev in ip_events:
-                if ev.event_category == "LOGIN_FAILURE":
-                    fail_streak.append(ev)
-                elif ev.event_category == "LOGIN_SUCCESS":
-                    if len(fail_streak) >= 2:
-                        matched_event_ids = [e.id for e in fail_streak] + [ev.id]
-                        users = list({e.username for e in fail_streak if e.username} | ({ev.username} if ev.username else set()))
-                        alert = DetectionAlert(
-                            id=generate_uuid(),
-                            investigation_id=self.investigation_id,
-                            rule_name="Successful Login After Repeated Failures",
-                            severity="CRITICAL",
-                            explanation=(
-                                f"High-confidence credential compromise detected. IP {ip} successfully logged in as '{ev.username or 'unknown'}' "
-                                f"immediately following {len(fail_streak)} failed authentication attempts."
-                            ),
-                            event_ids=json.dumps(matched_event_ids),
-                            ip_addresses=json.dumps([ip]),
-                            usernames=json.dumps(users),
-                            created_at=datetime.utcnow(),
-                            alert_type="ACCOUNT_COMPROMISE",
-                        )
-                        alerts.append(alert)
-                        fail_streak = []  # Reset streak after detection
+        stmt = (
+            select(
+                Event.source_ip,
+                Event.event_category,
+                Event.username,
+                Event.id,
+            )
+            .where(
+                Event.investigation_id == self.investigation_id,
+                Event.source_ip.isnot(None),
+                Event.event_category.in_(("LOGIN_FAILURE", "LOGIN_SUCCESS")),
+            )
+            .order_by(Event.normalized_timestamp.asc().nulls_last(), Event.id.asc())
+        )
+        for row in self._stream(stmt):
+            state = state_by_ip[row.source_ip]
+            if row.event_category == "LOGIN_FAILURE":
+                state["fail_count"] += 1
+                if row.username:
+                    state["fail_users"].add(row.username)
+                if len(state["fail_ids"]) < MAX_ALERT_EVENT_IDS:
+                    state["fail_ids"].append(row.id)
+            elif state["fail_count"] >= 2 and len(alerts) < MAX_ALERTS_PER_RULE:
+                users = set(state["fail_users"])
+                if row.username:
+                    users.add(row.username)
+                event_ids = list(state["fail_ids"])
+                if len(event_ids) < MAX_ALERT_EVENT_IDS:
+                    event_ids.append(row.id)
+                alert = DetectionAlert(
+                    id=generate_uuid(),
+                    investigation_id=self.investigation_id,
+                    rule_name="Successful Login After Repeated Failures",
+                    severity="CRITICAL",
+                    explanation=(
+                        f"High-confidence credential compromise detected. IP {row.source_ip} successfully logged in as "
+                        f"'{row.username or 'unknown'}' immediately following {state['fail_count']} failed "
+                        "authentication attempts."
+                    ),
+                    event_ids=json.dumps(event_ids),
+                    ip_addresses=json.dumps([row.source_ip]),
+                    usernames=json.dumps(sorted(users)),
+                    created_at=datetime.utcnow(),
+                    alert_type="ACCOUNT_COMPROMISE",
+                )
+                alerts.append(alert)
+                state["fail_count"] = 0
+                state["fail_users"] = set()
+                state["fail_ids"] = []
 
         return alerts
 
     def rule_3_multiple_accounts_targeted(self) -> List[DetectionAlert]:
         """Rule 3: Multiple distinct accounts targeted by one source IP (threshold >= 3)."""
         alerts: List[DetectionAlert] = []
-        users_by_ip: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
+        users_by_ip: Dict[str, Dict[str, dict]] = defaultdict(dict)
 
-        for ev in self.events:
-            if ev.source_ip and ev.username:
-                users_by_ip[ev.source_ip][ev.username].append(ev.id)
+        stmt = (
+            select(Event.source_ip, Event.username, Event.id)
+            .where(
+                Event.investigation_id == self.investigation_id,
+                Event.source_ip.isnot(None),
+                Event.username.isnot(None),
+            )
+        )
+        for row in self._stream(stmt):
+            user_map = users_by_ip[row.source_ip]
+            entry = user_map.setdefault(row.username, {"count": 0, "event_ids": []})
+            entry["count"] += 1
+            if len(entry["event_ids"]) < 50:
+                entry["event_ids"].append(row.id)
 
         for ip, user_map in users_by_ip.items():
-            if len(user_map) >= 3:
-                all_event_ids = [eid for eids in user_map.values() for eid in eids]
-                target_users = list(user_map.keys())
+            if len(user_map) >= 3 and len(alerts) < MAX_ALERTS_PER_RULE:
+                all_event_ids = [eid for entry in user_map.values() for eid in entry["event_ids"]]
+                target_users = sorted(user_map.keys())
                 alert = DetectionAlert(
                     id=generate_uuid(),
                     investigation_id=self.investigation_id,
@@ -130,7 +178,7 @@ class RuleEngine:
                     severity="HIGH",
                     explanation=(
                         f"Potential user enumeration or password spraying: IP {ip} targeted {len(target_users)} "
-                        f"different accounts: {', '.join(sorted(target_users))}."
+                        f"different accounts: {', '.join(target_users)}."
                     ),
                     event_ids=json.dumps(all_event_ids[:50]),
                     ip_addresses=json.dumps([ip]),
@@ -145,20 +193,35 @@ class RuleEngine:
     def rule_4_suspicious_path_access(self) -> List[DetectionAlert]:
         """Rule 4: Suspicious path access (admin, config, passwd, shadow, etc.)."""
         alerts: List[DetectionAlert] = []
-        suspicious_by_ip: Dict[str, List[Event]] = defaultdict(list)
-        matched_paths_by_ip: Dict[str, Set[str]] = defaultdict(set)
+        suspicious_by_ip: Dict[str, dict] = defaultdict(
+            lambda: {"count": 0, "users": set(), "paths": set(), "event_ids": []}
+        )
 
-        for ev in self.events:
-            text = f"{ev.description or ''} {ev.raw_record or ''}".lower()
+        stmt = select(
+            Event.id,
+            Event.source_ip,
+            Event.username,
+            Event.description,
+            Event.raw_record,
+        ).where(Event.investigation_id == self.investigation_id)
+
+        for row in self._stream(stmt, batch_size=2000):
+            text = f"{row.description or ''} {row.raw_record or ''}".lower()
             detected = [p for p in SUSPICIOUS_PATHS if p in text]
-            if detected:
-                ip = ev.source_ip or "UNKNOWN_ORIGIN"
-                suspicious_by_ip[ip].append(ev)
-                matched_paths_by_ip[ip].update(detected)
+            if not detected:
+                continue
+            ip = row.source_ip or "UNKNOWN_ORIGIN"
+            entry = suspicious_by_ip[ip]
+            entry["count"] += 1
+            if row.username:
+                entry["users"].add(row.username)
+            entry["paths"].update(detected)
+            if len(entry["event_ids"]) < MAX_ALERT_EVENT_IDS:
+                entry["event_ids"].append(row.id)
 
-        for ip, susp_events in suspicious_by_ip.items():
-            paths = list(matched_paths_by_ip[ip])
-            users = list({e.username for e in susp_events if e.username})
+        for ip, entry in suspicious_by_ip.items():
+            if len(alerts) >= MAX_ALERTS_PER_RULE:
+                break
             alert = DetectionAlert(
                 id=generate_uuid(),
                 investigation_id=self.investigation_id,
@@ -166,11 +229,11 @@ class RuleEngine:
                 severity="HIGH",
                 explanation=(
                     f"Suspicious probing or exploitation requests detected from {ip} targeting sensitive resources: "
-                    f"{', '.join(paths)}. Total requests: {len(susp_events)}."
+                    f"{', '.join(sorted(entry['paths']))}. Total requests: {entry['count']}."
                 ),
-                event_ids=json.dumps([e.id for e in susp_events]),
+                event_ids=json.dumps(entry["event_ids"]),
                 ip_addresses=json.dumps([ip] if ip != "UNKNOWN_ORIGIN" else []),
-                usernames=json.dumps(users),
+                usernames=json.dumps(sorted(entry["users"])),
                 created_at=datetime.utcnow(),
                 alert_type="RECONNAISSANCE_OR_EXPLOITATION",
             )
@@ -181,24 +244,34 @@ class RuleEngine:
     def rule_5_privilege_escalation(self) -> List[DetectionAlert]:
         """Rule 5: Privilege escalation (sudo / su after login or elevated commands)."""
         alerts: List[DetectionAlert] = []
-        priv_events = [e for e in self.events if e.event_category == "PRIVILEGE_CHANGE"]
 
-        if not priv_events:
-            return alerts
+        stmt = select(
+            Event.id,
+            Event.username,
+            Event.source_system,
+            Event.description,
+            Event.raw_record,
+            Event.source_ip,
+        ).where(
+            Event.investigation_id == self.investigation_id,
+            Event.event_category == "PRIVILEGE_CHANGE",
+        )
 
-        for ev in priv_events:
-            users = [ev.username] if ev.username else []
+        for row in self._stream(stmt):
+            if len(alerts) >= MAX_ALERTS_PER_RULE:
+                break
+            users = [row.username] if row.username else []
             alert = DetectionAlert(
                 id=generate_uuid(),
                 investigation_id=self.investigation_id,
                 rule_name="Privilege Escalation Detected",
                 severity="HIGH",
                 explanation=(
-                    f"Elevated execution detected by '{ev.username or 'unknown'}' on {ev.source_system or 'system'}: "
-                    f"{ev.description or ev.raw_record}"
+                    f"Elevated execution detected by '{row.username or 'unknown'}' on "
+                    f"{row.source_system or 'system'}: {row.description or row.raw_record}"
                 ),
-                event_ids=json.dumps([ev.id]),
-                ip_addresses=json.dumps([ev.source_ip] if ev.source_ip else []),
+                event_ids=json.dumps([row.id]),
+                ip_addresses=json.dumps([row.source_ip] if row.source_ip else []),
                 usernames=json.dumps(users),
                 created_at=datetime.utcnow(),
                 alert_type="PRIVILEGE_ESCALATION",
@@ -210,28 +283,55 @@ class RuleEngine:
     def rule_6_application_errors_following_activity(self) -> List[DetectionAlert]:
         """Rule 6: Application errors following suspicious activity or probes."""
         alerts: List[DetectionAlert] = []
-        app_errors = [e for e in self.events if e.event_category == "APPLICATION_ERROR"]
-        suspicious_events = [
-            e for e in self.events if e.event_category in ("LOGIN_FAILURE", "PRIVILEGE_CHANGE")
-        ]
+        app_error_ids: List[str] = []
+        app_error_count = 0
+        app_ips: Set[str] = set()
+        app_users: Set[str] = set()
 
-        if app_errors and (suspicious_events or len(app_errors) >= 3):
-            event_ids = [e.id for e in app_errors] + [e.id for e in suspicious_events[:10]]
-            ips = list({e.source_ip for e in app_errors if e.source_ip} | {e.source_ip for e in suspicious_events if e.source_ip})
-            users = list({e.username for e in app_errors if e.username} | {e.username for e in suspicious_events if e.username})
+        stmt = select(Event.id, Event.source_ip, Event.username).where(
+            Event.investigation_id == self.investigation_id,
+            Event.event_category == "APPLICATION_ERROR",
+        )
+        for row in self._stream(stmt):
+            app_error_count += 1
+            if len(app_error_ids) < MAX_ALERT_EVENT_IDS:
+                app_error_ids.append(row.id)
+            if row.source_ip:
+                app_ips.add(row.source_ip)
+            if row.username:
+                app_users.add(row.username)
 
+        suspicious_ids: List[str] = []
+        suspicious_count = 0
+        suspicious_ips: Set[str] = set()
+        suspicious_users: Set[str] = set()
+
+        stmt = select(Event.id, Event.source_ip, Event.username).where(
+            Event.investigation_id == self.investigation_id,
+            Event.event_category.in_(("LOGIN_FAILURE", "PRIVILEGE_CHANGE")),
+        )
+        for row in self._stream(stmt):
+            suspicious_count += 1
+            if len(suspicious_ids) < 10:
+                suspicious_ids.append(row.id)
+            if row.source_ip:
+                suspicious_ips.add(row.source_ip)
+            if row.username:
+                suspicious_users.add(row.username)
+
+        if app_error_count and (suspicious_count or app_error_count >= 3):
             alert = DetectionAlert(
                 id=generate_uuid(),
                 investigation_id=self.investigation_id,
                 rule_name="Application Errors Correlated with Suspicious Activity",
                 severity="MEDIUM",
                 explanation=(
-                    f"Observed {len(app_errors)} application error / 500 events concurrent with security anomalies. "
+                    f"Observed {app_error_count} application error / 500 events concurrent with security anomalies. "
                     "Indicates potential system degradation, payload crash, or injection error."
                 ),
-                event_ids=json.dumps(event_ids),
-                ip_addresses=json.dumps(ips),
-                usernames=json.dumps(users),
+                event_ids=json.dumps(app_error_ids + suspicious_ids),
+                ip_addresses=json.dumps(sorted(app_ips | suspicious_ips)),
+                usernames=json.dumps(sorted(app_users | suspicious_users)),
                 created_at=datetime.utcnow(),
                 alert_type="SYSTEM_INSTABILITY_OR_ATTACK_IMPACT",
             )
@@ -242,33 +342,46 @@ class RuleEngine:
     def rule_7_after_hours_activity(self) -> List[DetectionAlert]:
         """Rule 7: After-hours activity (outside 07:00-19:00 UTC)."""
         alerts: List[DetectionAlert] = []
-        off_hour_events: List[Event] = []
+        off_hour_count = 0
+        off_hour_ids: List[str] = []
+        users: Set[str] = set()
+        ips: Set[str] = set()
 
-        for ev in self.events:
-            if ev.normalized_timestamp:
-                hour = ev.normalized_timestamp.hour
-                # Outside 07:00 to 19:00
-                if hour < 7 or hour >= 19:
-                    # Focus on high-impact actions
-                    if ev.event_category in ("LOGIN_SUCCESS", "PRIVILEGE_CHANGE", "ACCOUNT_CHANGE"):
-                        off_hour_events.append(ev)
+        stmt = select(
+            Event.id,
+            Event.username,
+            Event.source_ip,
+            Event.normalized_timestamp,
+        ).where(
+            Event.investigation_id == self.investigation_id,
+            Event.event_category.in_(("LOGIN_SUCCESS", "PRIVILEGE_CHANGE", "ACCOUNT_CHANGE")),
+            Event.normalized_timestamp.isnot(None),
+        )
+        for row in self._stream(stmt):
+            hour = row.normalized_timestamp.hour
+            if hour < 7 or hour >= 19:
+                off_hour_count += 1
+                if len(off_hour_ids) < MAX_ALERT_EVENT_IDS:
+                    off_hour_ids.append(row.id)
+                if row.username:
+                    users.add(row.username)
+                if row.source_ip:
+                    ips.add(row.source_ip)
 
-        if off_hour_events:
-            users = list({e.username for e in off_hour_events if e.username})
-            ips = list({e.source_ip for e in off_hour_events if e.source_ip})
+        if off_hour_count:
             alert = DetectionAlert(
                 id=generate_uuid(),
                 investigation_id=self.investigation_id,
                 rule_name="Anomalous After-Hours Security Activity",
                 severity="MEDIUM",
                 explanation=(
-                    f"Identified {len(off_hour_events)} sensitive security actions (logins, privilege escalations) "
-                    f"conducted during off-hours (between 19:00 and 07:00 UTC). "
-                    f"Involved users: {', '.join(users) if users else 'system'}."
+                    f"Identified {off_hour_count} sensitive security actions (logins, privilege escalations) "
+                    "conducted during off-hours (between 19:00 and 07:00 UTC). "
+                    f"Involved users: {', '.join(sorted(users)) if users else 'system'}."
                 ),
-                event_ids=json.dumps([e.id for e in off_hour_events]),
-                ip_addresses=json.dumps(ips),
-                usernames=json.dumps(users),
+                event_ids=json.dumps(off_hour_ids),
+                ip_addresses=json.dumps(sorted(ips)),
+                usernames=json.dumps(sorted(users)),
                 created_at=datetime.utcnow(),
                 alert_type="ANOMALOUS_OFF_HOURS_ACTIVITY",
             )

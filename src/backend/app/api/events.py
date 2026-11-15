@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.cache import get_cached, set_cached
 from app.models.models import Event, Investigation
 from app.schemas.schemas import (
     EventResponse,
@@ -153,6 +154,12 @@ def get_processing_summary(investigation_id: str, db: Session = Depends(get_db))
             detail=f"Investigation '{investigation_id}' not found."
         )
 
+    cache_key = f"processing-summary:{investigation_id}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return ProcessingSummaryResponse(**cached)
+
     builder = TimelineBuilder(db)
     summary = builder.get_processing_summary(investigation_id)
+    set_cached(cache_key, summary, 30)
     return ProcessingSummaryResponse(**summary)

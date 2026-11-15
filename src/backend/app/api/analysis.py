@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.cache import invalidate_cache
 from app.models.models import Investigation, DetectionAlert, AuditLog
 from app.schemas.schemas import DetectionAlertResponse, AnalyzeResponse
 from app.services.analysis.rule_engine import run_all_rules
@@ -56,6 +57,7 @@ def analyze_investigation(investigation_id: str, db: Session = Depends(get_db)):
     )
     db.add(audit)
     db.commit()
+    invalidate_cache()
 
     return AnalyzeResponse(
         investigation_id=investigation_id,

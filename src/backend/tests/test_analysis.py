@@ -157,3 +157,32 @@ def test_rule_4_suspicious_path_access():
     assert len(alerts) == 1
     assert "Suspicious Path" in alerts[0].rule_name
     assert "203.0.113.88" in alerts[0].ip_addresses
+
+
+def test_rule_1_caps_event_ids_for_large_burst():
+    """Verify Rule 1 keeps alert payloads bounded for very large bursts."""
+    db = _setup_test_db()
+    inv_id = generate_uuid()
+    ev_id = generate_uuid()
+
+    inv = Investigation(id=inv_id, name="Large Burst Case", status="ACTIVE")
+    evidence = EvidenceFile(
+        id=ev_id, investigation_id=inv_id, original_filename="burst.log",
+        stored_filename="b.log", file_size=100, sha256_hash="dummy"
+    )
+    db.add_all([inv, evidence])
+
+    for i in range(250):
+        db.add(Event(
+            id=generate_uuid(), investigation_id=inv_id, evidence_id=ev_id,
+            normalized_timestamp=datetime(2026, 10, 30, 10, 0, i % 60),
+            event_category="LOGIN_FAILURE", username="root",
+            source_ip="192.0.2.10", raw_record="fail", parsing_status="OK"
+        ))
+    db.commit()
+
+    alerts = RuleEngine(db, inv_id).rule_1_multiple_failed_logins()
+
+    assert len(alerts) == 1
+    assert len(json.loads(alerts[0].event_ids)) == 200
+    assert "250 authentication failures" in alerts[0].explanation
