@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "VIGILANCE Digital Forensics Platform"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    DEMO_MODE: bool = False
 
     # Storage paths
     EVIDENCE_STORAGE_PATH: str = os.getenv(

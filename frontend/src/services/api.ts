@@ -115,11 +115,14 @@ export const evidenceApi = {
   getProcessingJob: (jobId: string) => api.get<ProcessingJobStatus>(`/processing-jobs/${jobId}`),
   verify: (id: string) => api.post<IntegrityVerification>(`/evidence/${id}/verify`),
   getVerifications: (id: string) => api.get<IntegrityVerification[]>(`/evidence/${id}/verifications`),
+  demoTamper: (id: string) => api.post(`/evidence/${id}/demo-tamper`),
+  demoRestore: (id: string) => api.post(`/evidence/${id}/demo-restore`),
   download: (id: string) => `${getApiBaseUrl()}/evidence/${id}/download`,
 };
 
 // Demo
 export const demoApi = {
+  status: () => api.get<{ demo_mode: boolean }>('/demo/status'),
   getScenarios: () => api.get<DemoScenario[]>('/demo/scenarios'),
   loadScenario: (scenario_id: string) =>
     api.post<{

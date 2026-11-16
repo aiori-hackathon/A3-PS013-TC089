@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -362,6 +363,127 @@ def verify_evidence_integrity(evidence_id: str, db: Session = Depends(get_db)):
         result=result_str,
         notes=notes,
     )
+
+
+DEMO_TAMPER_MARKER = b"\n[TAMPERED: VIGILANCE DEMO MODE]\n"
+
+
+def _require_demo_mode() -> None:
+    """Reject demo-only mutations unless the instance explicitly enables them."""
+    if not settings.DEMO_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo mode is disabled. Set DEMO_MODE=true to enable tamper simulation.",
+        )
+
+
+def _stored_evidence_path(evidence: EvidenceFile) -> Path:
+    return (
+        Path(settings.EVIDENCE_STORAGE_PATH)
+        / evidence.investigation_id
+        / evidence.stored_filename
+    )
+
+
+def _demo_backup_path(evidence: EvidenceFile) -> Path:
+    file_path = _stored_evidence_path(evidence)
+    return file_path.with_name(f"{evidence.stored_filename}.demo-original")
+
+
+@router.post("/evidence/{evidence_id}/demo-tamper")
+def demo_tamper_evidence(evidence_id: str, db: Session = Depends(get_db)):
+    """DEMO ONLY: modify the stored artifact so verification reports a real MISMATCH."""
+    _require_demo_mode()
+    evidence = db.query(EvidenceFile).filter(EvidenceFile.id == evidence_id).first()
+    if not evidence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evidence file '{evidence_id}' was not found.",
+        )
+
+    file_path = _stored_evidence_path(evidence)
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Stored evidence file is missing from storage.",
+        )
+
+    backup_path = _demo_backup_path(evidence)
+    if not backup_path.exists():
+        shutil.copy2(file_path, backup_path)
+
+    with open(file_path, "ab") as handle:
+        handle.write(DEMO_TAMPER_MARKER)
+
+    tampered_hash = calculate_sha256(str(file_path))
+    db.add(AuditLog(
+        investigation_id=evidence.investigation_id,
+        evidence_id=evidence.id,
+        action="DEMO_TAMPER",
+        actor="DEMO",
+        timestamp=datetime.utcnow(),
+        details=json.dumps({
+            "baseline_hash": evidence.sha256_hash,
+            "tampered_hash": tampered_hash,
+            "backup": backup_path.name,
+        }),
+    ))
+    db.commit()
+    invalidate_cache()
+
+    return {
+        "evidence_id": evidence.id,
+        "original_hash": evidence.sha256_hash,
+        "tampered_hash": tampered_hash,
+        "result": "TAMPERED",
+        "note": "Stored artifact modified. Run verification to observe MISMATCH.",
+    }
+
+
+@router.post("/evidence/{evidence_id}/demo-restore")
+def demo_restore_evidence(evidence_id: str, db: Session = Depends(get_db)):
+    """DEMO ONLY: restore the original stored artifact from the demo backup."""
+    _require_demo_mode()
+    evidence = db.query(EvidenceFile).filter(EvidenceFile.id == evidence_id).first()
+    if not evidence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evidence file '{evidence_id}' was not found.",
+        )
+
+    file_path = _stored_evidence_path(evidence)
+    backup_path = _demo_backup_path(evidence)
+    if not backup_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No demo backup exists for this evidence file. Nothing to restore.",
+        )
+
+    shutil.copy2(backup_path, file_path)
+    backup_path.unlink()
+
+    restored_hash = calculate_sha256(str(file_path))
+    db.add(AuditLog(
+        investigation_id=evidence.investigation_id,
+        evidence_id=evidence.id,
+        action="DEMO_RESTORE",
+        actor="DEMO",
+        timestamp=datetime.utcnow(),
+        details=json.dumps({
+            "baseline_hash": evidence.sha256_hash,
+            "restored_hash": restored_hash,
+        }),
+    ))
+    db.commit()
+    invalidate_cache()
+
+    return {
+        "evidence_id": evidence.id,
+        "original_hash": evidence.sha256_hash,
+        "restored_hash": restored_hash,
+        "result": "RESTORED",
+        "hash_matches_baseline": restored_hash.lower() == evidence.sha256_hash.lower(),
+    }
 
 
 @router.get("/evidence/{evidence_id}/verifications", response_model=List[IntegrityVerificationResponse])

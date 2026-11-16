@@ -123,6 +123,12 @@ def list_demo_scenarios():
     return _get_available_scenarios()
 
 
+@router.get("/demo/status")
+def demo_status():
+    """Report whether demo-only controls (such as tamper simulation) are enabled."""
+    return {"demo_mode": settings.DEMO_MODE}
+
+
 @router.post("/demo/load-scenario", response_model=LoadScenarioResponse, status_code=status.HTTP_201_CREATED)
 def load_demo_scenario(payload: LoadScenarioRequest, db: Session = Depends(get_db)):
     """Instantiate a demo scenario: creates investigation, ingests evidence files, runs rules and sets triage benchmarks."""

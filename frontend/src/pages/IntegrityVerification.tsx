@@ -7,9 +7,11 @@ import {
   HardDrive,
   RefreshCw,
   FileCode,
+  Bug,
+  RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { investigationsApi, evidenceApi } from '../services/api';
+import { investigationsApi, evidenceApi, demoApi } from '../services/api';
 import type { Investigation, EvidenceFile, IntegrityVerification as VerificationType } from '../types';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -34,6 +36,17 @@ export const IntegrityVerificationPage: React.FC = () => {
 
   // Verification history
   const [history, setHistory] = useState<VerificationType[]>([]);
+
+  // Demo-only tamper simulation controls
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoBusy, setDemoBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    demoApi
+      .status()
+      .then((res) => setDemoMode(Boolean(res.data?.demo_mode)))
+      .catch(() => setDemoMode(false));
+  }, []);
 
   useEffect(() => {
     const fetchInvs = async () => {
@@ -115,6 +128,34 @@ export const IntegrityVerificationPage: React.FC = () => {
       toast.error('Verification failed to execute');
     } finally {
       setVerifyingId(null);
+    }
+  };
+
+  const handleDemoTamper = async (ev: EvidenceFile) => {
+    setDemoBusy(`${ev.id}:tamper`);
+    try {
+      await evidenceApi.demoTamper(ev.id);
+      toast('Demo tamper applied to the stored artifact', { icon: '!' });
+      await handleVerify(ev);
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || 'Demo tamper unavailable');
+    } finally {
+      setDemoBusy(null);
+    }
+  };
+
+  const handleDemoRestore = async (ev: EvidenceFile) => {
+    setDemoBusy(`${ev.id}:restore`);
+    try {
+      await evidenceApi.demoRestore(ev.id);
+      toast.success('Original artifact restored from demo backup');
+      await handleVerify(ev);
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || 'Demo restore unavailable');
+    } finally {
+      setDemoBusy(null);
     }
   };
 
@@ -254,15 +295,39 @@ export const IntegrityVerificationPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    loading={verifyingId === ev.id}
-                    icon={<RefreshCw className="w-3.5 h-3.5 text-sky-400" />}
-                    onClick={() => handleVerify(ev)}
-                  >
-                    Recalculate & Verify
-                  </Button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {demoMode && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          loading={demoBusy === `${ev.id}:tamper`}
+                          icon={<Bug className="w-3.5 h-3.5" />}
+                          onClick={() => handleDemoTamper(ev)}
+                        >
+                          Tamper (demo)
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={demoBusy === `${ev.id}:restore`}
+                          icon={<RotateCcw className="w-3.5 h-3.5" />}
+                          onClick={() => handleDemoRestore(ev)}
+                        >
+                          Restore (demo)
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={verifyingId === ev.id}
+                      icon={<RefreshCw className="w-3.5 h-3.5 text-sky-400" />}
+                      onClick={() => handleVerify(ev)}
+                    >
+                      Recalculate &amp; Verify
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="bg-[#111827] p-2.5 rounded border border-[#1e293b] font-mono text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
