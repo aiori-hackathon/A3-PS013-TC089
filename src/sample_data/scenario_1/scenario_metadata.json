@@ -10,7 +10,7 @@
       "source_system": "webserver-01",
       "source_category": "Linux Host",
       "timezone": "UTC",
-      "records": 24
+      "records_total": 24
     },
     {
       "filename": "firewall.json",
@@ -18,7 +18,7 @@
       "source_system": "perimeter-fw-01",
       "source_category": "Firewall",
       "timezone": "UTC",
-      "records": 10
+      "records_total": 10
     }
   ],
   "expected_detections": [
@@ -28,5 +28,16 @@
     "Privilege escalation via sudo",
     "Suspicious access to /etc/shadow"
   ],
-  "attack_narrative": "Attacker from 192.168.100.5 performed an SSH brute-force attack against webserver-01, trying multiple usernames. After 17 failures across 6 usernames, successfully authenticated as 'ubuntu'. Escalated to root via sudo, accessed /etc/shadow and /etc/passwd, created a backdoor user, then exfiltrated data via a reverse connection to port 4444."
+  "attack_narrative": "Attacker from 192.168.100.5 performed an SSH brute-force attack against webserver-01, trying multiple usernames. After 17 failures across 6 usernames, successfully authenticated as 'ubuntu'. Escalated to root via sudo, accessed /etc/shadow and /etc/passwd, created a backdoor user, then exfiltrated data via a reverse connection to port 4444.",
+  "expected_events": 34,
+  "expected_alerts": 6,
+  "upload_files": [
+    "auth_log.csv",
+    "firewall.json"
+  ],
+  "excluded_files": [
+    "scenario.json",
+    "scenario_metadata.json"
+  ],
+  "alert_note": "Expected detections are investigative findings; the rule engine aggregates them into 6 alerts."
 }

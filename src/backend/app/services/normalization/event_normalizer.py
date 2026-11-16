@@ -1,5 +1,6 @@
 """Event categorization and severity normalization service."""
 
+import re
 from typing import Optional
 
 EVENT_CATEGORIES = {
@@ -118,6 +119,15 @@ def categorize_event(
 
     if not combined_text.strip():
         return "UNCATEGORIZED"
+
+    # HTTP access records are identified by their method even when the path
+    # contains words such as "passwd" that would otherwise match account rules.
+    if str(event_type or "").strip().upper() in {
+        "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT"
+    }:
+        if re.search(r'"(?:status|status_code|http_status)"\s*:\s*"?5\d{2}\b', str(raw_record or ""), re.I):
+            return "APPLICATION_ERROR"
+        return "HTTP_REQUEST"
 
     # Prioritize specific high-fidelity categories first
     # 1. Login Failure vs Success

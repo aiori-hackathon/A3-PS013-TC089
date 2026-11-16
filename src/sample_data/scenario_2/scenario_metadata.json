@@ -1,7 +1,7 @@
 {
   "scenario_id": "scenario_2",
   "name": "Web Application Reconnaissance and Probing",
-  "description": "Simulated web application attack including directory enumeration, credential stuffing, sensitive file access, API scraping, and path traversal attempts.",
+  "description": "Simulated web application attack including directory enumeration, credential stuffing, sensitive file access, API scraping, and obfuscated path traversal attempts.",
   "synthetic": true,
   "files": [
     {
@@ -10,15 +10,24 @@
       "source_system": "nginx-webserver",
       "source_category": "Web Application",
       "timezone": "UTC",
-      "records": 31
+      "records_total": 31
     }
   ],
   "expected_detections": [
     "Suspicious path access to /admin, /.env, /wp-admin, /config.php",
-    "Multiple failed POST login attempts (HTTP 401)",
-    "Path traversal attempts (/../../../etc/passwd)",
-    "Repeated API enumeration requests from 10.0.0.42",
+    "Repeated 401 login attempts and API enumeration from 10.0.0.42",
+    "Obfuscated path traversal attempt (....//....//....//etc/passwd)",
     "Server errors (500) following suspicious activity",
-    "User agent change mid-session (browser → python-requests)"
-  ]
+    "User-agent change from browser to python-requests"
+  ],
+  "expected_events": 31,
+  "expected_alerts": 2,
+  "upload_files": [
+    "web_access.csv"
+  ],
+  "excluded_files": [
+    "scenario.json",
+    "scenario_metadata.json"
+  ],
+  "alert_note": "Expected detections are investigative findings; the rule engine aggregates them into 2 alerts: RECONNAISSANCE_OR_EXPLOITATION and SYSTEM_INSTABILITY_OR_ATTACK_IMPACT."
 }

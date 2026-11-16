@@ -95,7 +95,17 @@ export const LogIngestion: React.FC = () => {
   };
 
   const appendFiles = (files: File[]) => {
-    const newItems: QueuedFile[] = files.map((file) => {
+    const acceptedFiles = files.filter((file) => {
+      const name = file.name.toLowerCase();
+      return name !== 'scenario_metadata.json' && name !== 'scenario.json';
+    });
+    const skippedCount = files.length - acceptedFiles.length;
+    if (skippedCount > 0) {
+      toast.error(`${skippedCount} scenario metadata file(s) skipped — upload only the log artifacts`);
+    }
+    if (acceptedFiles.length === 0) return;
+
+    const newItems: QueuedFile[] = acceptedFiles.map((file) => {
       const lowerName = file.name.toLowerCase();
       let defaultCategory: string = SOURCE_CATEGORIES[0];
       if (lowerName.includes('firewall') || lowerName.includes('palo') || lowerName.includes('fw')) {

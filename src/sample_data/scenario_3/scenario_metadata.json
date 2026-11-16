@@ -11,7 +11,7 @@
       "source_system": "appserver-prod",
       "source_category": "Linux Host",
       "timezone": "UTC",
-      "timezone_note": "No year in syslog timestamps — inferred from scenario reference year 2024",
+      "timezone_note": "No year in syslog timestamps \u2014 inferred from scenario reference year 2024",
       "records_total": 26,
       "records_malformed": 1,
       "clock_skew": false
@@ -22,7 +22,7 @@
       "source_system": "application-stack",
       "source_category": "Web Application",
       "timezone": "+05:30",
-      "timezone_note": "Timestamps in IST (+05:30) — must be converted to UTC",
+      "timezone_note": "Timestamps in IST (+05:30) \u2014 must be converted to UTC",
       "records_total": 10,
       "records_with_null_timestamp": 1
     },
@@ -34,7 +34,7 @@
       "timezone": "UTC",
       "clock_skew": true,
       "clock_skew_seconds": -300,
-      "clock_skew_note": "This firewall is approximately 5 minutes ahead of NTP — raw timestamps corrected by -300 seconds during ingestion",
+      "clock_skew_note": "This firewall is approximately 5 minutes ahead of NTP \u2014 raw timestamps corrected by -300 seconds during ingestion",
       "records_total": 12,
       "records_malformed": 2
     }
@@ -50,11 +50,23 @@
     "Parsing failures in syslog and CSV"
   ],
   "complexity_notes": [
-    "Syslog timestamps lack year — inferred from scenario reference year 2024",
-    "App events in IST timezone (+05:30) — must convert to UTC",
-    "Firewall has documented clock skew (~5 minutes) — raw timestamps corrected by -300 seconds",
-    "One JSON event has null timestamp — must be flagged MISSING",
+    "Syslog timestamps lack year \u2014 inferred from scenario reference year 2024",
+    "App events in IST timezone (+05:30) \u2014 must convert to UTC",
+    "Firewall has documented clock skew (~5 minutes) \u2014 raw timestamps corrected by -300 seconds",
+    "One JSON event has null timestamp \u2014 must be flagged MISSING",
     "One syslog line is completely malformed",
     "Two CSV rows are malformed (wrong column count, missing timestamp)"
-  ]
+  ],
+  "expected_events": 48,
+  "expected_alerts": 9,
+  "upload_files": [
+    "linux_auth.log",
+    "app_events.json",
+    "firewall_events.csv"
+  ],
+  "excluded_files": [
+    "scenario.json",
+    "scenario_metadata.json"
+  ],
+  "alert_note": "Expected detections are investigative findings; the rule engine aggregates them into 9 alerts."
 }

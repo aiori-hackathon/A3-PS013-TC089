@@ -95,6 +95,39 @@ def test_demo_scenarios_list():
     assert "scenario_3" in scenario_ids
 
 
+def test_demo_scenarios_load_expected_counts(tmp_path, monkeypatch):
+    """Verify each built-in scenario loads its documented event and alert totals."""
+    from pathlib import Path
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "EVIDENCE_STORAGE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(
+        settings,
+        "SAMPLE_DATA_PATH",
+        str(Path(__file__).resolve().parents[2] / "sample_data"),
+    )
+
+    expected = {
+        "scenario_1": (2, 34, 6),
+        "scenario_2": (1, 31, 2),
+        "scenario_3": (3, 48, 9),
+    }
+    for scenario_id, (files, events, alerts) in expected.items():
+        res = client.post("/api/demo/load-scenario", json={"scenario_id": scenario_id})
+        assert res.status_code == 201, res.text
+        data = res.json()
+        assert data["files_ingested"] == files
+        assert data["total_events"] == events
+        assert data["total_alerts"] == alerts
+
+        detail = client.get(f"/api/investigations/{data['investigation_id']}").json()
+        assert detail["event_count"] == events
+        assert detail["alert_count"] == alerts
+
+        client.delete(f"/api/investigations/{data['investigation_id']}")
+
+
 def test_triage_comparison_flow():
     """Verify triage measurement submission and comparison calculation."""
     # Create investigation

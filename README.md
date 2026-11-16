@@ -45,6 +45,16 @@ The ingestion workflow also supports an explicit **reference year** for syslog s
 
 Native parsers cover syslog/auth.log, Apache error/access logs, CSV, and JSON/NDJSON. A generic parser handles ArcSight CEF, IBM QRadar LEEF 1.x/2.0 (including tab, caret, pipe, and hex delimiters), and logfmt/key-value events, with a registry for adding custom format parsers.
 
+### Built-in Demo Scenarios
+
+| Scenario | Evidence files | Events | Alerts | Focus |
+|---|---|---:|---:|---|
+| Scenario 1 — Brute-Force Authentication | `auth_log.csv`, `firewall.json` | 34 | 6 | SSH brute force, successful login, sudo escalation, sensitive file access, outbound transfer |
+| Scenario 2 — Web Reconnaissance | `web_access.csv` | 31 | 2 | Directory/API enumeration, 401 attempts, sensitive paths, obfuscated path traversal, HTTP 500 errors |
+| Scenario 3 — Multi-Source Reconstruction | `linux_auth.log`, `app_events.json`, `firewall_events.csv` | 48 | 9 | Year-less syslog, +05:30 conversion, clock skew, missing/invalid timestamps, cross-source correlation |
+
+`scenario_metadata.json` and `scenario.json` are configuration files, not evidence. Use **Demo Scenarios** or upload only the listed evidence files. The sample files avoid literal path-traversal strings because Render's Cloudflare WAF rejects uploads containing them; real logs with those strings require a host without that WAF or a scoped WAF exception.
+
 ### Large Log Handling
 
 Uploads are streamed to disk in 1 MB chunks and hashed incrementally, so the full artifact is never held in memory. Parsing runs as a background job and the UI polls `/api/processing-jobs/{job_id}` for progress. Syslog, Apache error/access logs, CEF, LEEF, logfmt, CSV, and NDJSON are parsed line-by-line; JSON arrays still require a full decode. Events are persisted in bounded batches controlled by `INGESTION_BATCH_SIZE` (default `50000`).

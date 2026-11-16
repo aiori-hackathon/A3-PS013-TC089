@@ -26,7 +26,7 @@ timestamp,method,path,status_code,bytes_sent,response_time_ms,source_ip,user_age
 2024-02-20T09:01:02Z,POST,/api/search,500,512,4501,10.0.0.42,python-requests/2.31.0,"-",HIGH
 2024-02-20T09:01:03Z,POST,/api/search,500,512,4498,10.0.0.42,python-requests/2.31.0,"-",HIGH
 2024-02-20T09:01:10Z,GET,/etc/passwd,400,256,8,10.0.0.42,python-requests/2.31.0,"-",CRITICAL
-2024-02-20T09:01:11Z,GET,/../../../etc/passwd,400,256,7,10.0.0.42,python-requests/2.31.0,"-",CRITICAL
+2024-02-20T09:01:11Z,GET,/....//....//....//etc/passwd,400,256,7,10.0.0.42,python-requests/2.31.0,"-",CRITICAL
 2024-02-20T09:01:15Z,GET,/api/v1/admin/dump,403,256,9,10.0.0.42,python-requests/2.31.0,"-",CRITICAL
 2024-02-20T09:02:00Z,GET,/index.html,200,4521,44,172.16.0.100,Mozilla/5.0 (Macintosh; Intel Mac OS X),"-",INFO
 2024-02-20T09:02:05Z,GET,/products.html,200,8954,67,172.16.0.100,Mozilla/5.0 (Macintosh; Intel Mac OS X),/index.html,INFO

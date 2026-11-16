@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Set
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.models import Event, DetectionAlert, generate_uuid
@@ -24,6 +24,7 @@ SUSPICIOUS_PATHS = [
     "phpmyadmin",
     "/shell",
     "/backup",
+    "/api/users",
     "cmd.exe",
     "root.exe",
     "/bin/sh",
@@ -319,7 +320,13 @@ class RuleEngine:
 
         stmt = select(Event.id, Event.source_ip, Event.username).where(
             Event.investigation_id == self.investigation_id,
-            Event.event_category.in_(("LOGIN_FAILURE", "PRIVILEGE_CHANGE")),
+            or_(
+                Event.event_category.in_(("LOGIN_FAILURE", "PRIVILEGE_CHANGE")),
+                and_(
+                    Event.event_category == "HTTP_REQUEST",
+                    Event.severity.in_(("HIGH", "CRITICAL")),
+                ),
+            ),
         )
         for row in self._stream(stmt):
             suspicious_count += 1

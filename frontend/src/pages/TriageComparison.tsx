@@ -36,7 +36,7 @@ export const TriageComparison: React.FC = () => {
   const [scenarioName, setScenarioName] = useState('Standard Triage Audit');
   const [manualFilesCount, setManualFilesCount] = useState<number>(3);
   const [manualRecordsCount, setManualRecordsCount] = useState<number>(15000);
-  const [manualDurationMinutes, setManualDurationMinutes] = useState<number>(45);
+  const [manualDurationMinutes, setManualDurationMinutes] = useState<number>(0);
   const [manualEventsIdentified, setManualEventsIdentified] = useState<number>(8);
   const [manualNotes, setManualNotes] = useState('Manual grepping and spreadsheet filtering across 3 log exports.');
 
@@ -129,6 +129,11 @@ export const TriageComparison: React.FC = () => {
     e.preventDefault();
     if (!selectedInvId) return;
 
+    if (!manualDurationMinutes || manualDurationMinutes <= 0) {
+      toast.error('Enter the measured manual duration in minutes');
+      return;
+    }
+
     try {
       setSavingManual(true);
       const endTime = new Date();
@@ -152,18 +157,24 @@ export const TriageComparison: React.FC = () => {
     }
   };
 
-  const manualSeconds = manualMeasurement
-    ? manualMeasurement.duration_seconds ?? manualDurationMinutes * 60
-    : comparison?.manual_duration_seconds ??
-      (estimate?.available ? estimate.estimated_seconds : manualDurationMinutes * 60);
+  const manualHasBaseline = Boolean(
+    manualMeasurement ||
+    comparison?.manual_duration_seconds != null ||
+    estimate?.available
+  );
+  const manualSeconds = manualHasBaseline
+    ? manualMeasurement
+      ? manualMeasurement.duration_seconds ?? manualDurationMinutes * 60
+      : comparison?.manual_duration_seconds ??
+        (estimate?.available ? estimate.estimated_seconds : 0)
+    : 0;
 
   const vigilanceSeconds =
     vigilanceMeasurement?.duration_seconds ?? comparison?.vigilance_duration_seconds ?? 0;
 
   const hasVigilance = vigilanceSeconds > 0;
   const manualIsEstimated =
-    !manualMeasurement &&
-    (comparison?.manual_is_estimated ?? (estimate?.available ?? false));
+    !manualMeasurement && (comparison?.manual_is_estimated ?? manualHasBaseline);
 
   const timeSavedSeconds = hasVigilance ? Math.max(0, manualSeconds - vigilanceSeconds) : 0;
   const percentageReduction =
@@ -175,7 +186,7 @@ export const TriageComparison: React.FC = () => {
     manualMeasurement?.events_identified ??
     comparison?.manual_events_identified ??
     estimate?.findings ??
-    manualEventsIdentified;
+    0;
   const vigilanceFindings =
     vigilanceMeasurement?.events_identified ??
     comparison?.vigilance_events_identified ??
@@ -240,7 +251,7 @@ export const TriageComparison: React.FC = () => {
               {hasVigilance ? formatDuration(timeSavedSeconds) : '—'}
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-              {formatDuration(manualSeconds)} ({manualIsEstimated ? 'estimated ' : ''}manual) →{' '}
+              {manualHasBaseline ? formatDuration(manualSeconds) : '—'} ({manualIsEstimated ? 'estimated ' : ''}manual) →{' '}
               {hasVigilance ? `${formatDuration(vigilanceSeconds)} (Vigilance)` : 'awaiting processing'}
             </div>
           </div>
@@ -266,12 +277,12 @@ export const TriageComparison: React.FC = () => {
             <Zap className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-mono text-slate-400 uppercase">Automated Correlation Hits</div>
+            <div className="text-xs font-mono text-slate-400 uppercase">Alerts Correlated</div>
             <div className="text-2xl font-bold font-mono text-cyan-400 mt-0.5">
               {vigilanceFindings}
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-              Threat heuristics vs {manualFindings} manual findings
+              Detection rules vs {manualFindings} manual findings
             </div>
           </div>
         </Card>
@@ -361,10 +372,12 @@ export const TriageComparison: React.FC = () => {
             title="Manual Investigation Workflow"
             subtitle="Record time spent conducting manual grep, spreadsheet pivot, and ad-hoc parsing"
             action={
-              manualIsEstimated ? (
+              manualMeasurement ? (
+                <Badge variant="MANUAL" size="sm" label="User Baseline" />
+              ) : manualIsEstimated ? (
                 <Badge variant="MEDIUM" size="sm" label="Auto-Estimated" />
               ) : (
-                <Badge variant="MANUAL" size="sm" label="User Baseline" />
+                <Badge variant="PENDING" size="sm" label="No Baseline" />
               )
             }
           />
@@ -399,9 +412,14 @@ export const TriageComparison: React.FC = () => {
                 label="Manual Duration (Minutes)"
                 type="number"
                 min={1}
-                value={manualDurationMinutes}
+                value={manualDurationMinutes || ''}
                 onChange={(e) => setManualDurationMinutes(Number(e.target.value))}
-                helperText={`${manualDurationMinutes * 60} seconds`}
+                placeholder="e.g. 45"
+                helperText={
+                  manualDurationMinutes > 0
+                    ? `${manualDurationMinutes * 60} seconds`
+                    : 'Enter the measured manual duration'
+                }
               />
               <Input
                 label="Events Identified"
@@ -462,7 +480,7 @@ export const TriageComparison: React.FC = () => {
             </div>
 
             <div className="p-3 rounded bg-[#0d1117] border border-[#1e293b] flex items-center justify-between">
-              <span className="text-slate-400">High-Fidelity Threat Events Correlated</span>
+              <span className="text-slate-400">Alerts Correlated</span>
               <span className="text-emerald-400 font-bold text-sm">
                 {vigilanceFindings}
               </span>

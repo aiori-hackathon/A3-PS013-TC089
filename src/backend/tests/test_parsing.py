@@ -230,6 +230,16 @@ def test_apache_admin_path_does_not_imply_privilege_change():
     assert category != "PRIVILEGE_CHANGE"
 
 
+def test_http_method_categorization_precedes_account_terms():
+    """Verify web paths containing account words stay in HTTP_REQUEST."""
+    category = categorize_event(
+        description="/etc/passwd",
+        event_type="GET",
+        raw_record='{"method": "GET", "path": "/etc/passwd"}',
+    )
+    assert category == "HTTP_REQUEST"
+
+
 def test_apache_log_format_detection():
     """Verify Apache error and access logs are detected as apache, not generic syslog."""
     error_log = (
